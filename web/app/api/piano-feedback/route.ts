@@ -108,7 +108,7 @@ export async function POST(req: Request) {
 
     // Determine which payload shape was sent:
     //   { summary: PracticeSummary }  — from PracticeTab
-    //   { prompt: string }            — from PracticeModal / usePianoCoach
+    //   { prompt: string }            — from PracticeModal
     let prompt: string;
 
     if (body?.summary && typeof body.summary === "object") {
