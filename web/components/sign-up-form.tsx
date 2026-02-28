@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { createClient } from "@/lib/supabase/client";
+import { signUp, signInWithGoogle } from "@/lib/supabase/auth";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -26,21 +26,14 @@ export function SignUpForm({
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
-  const supabase = createClient();
 
-  const handleSignUp = async (e: React.FormEvent) => {
+  const handleSignUp = async (e: React.SubmitEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError(null);
 
     try {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/dashboard`,
-        },
-      });
+      const { error } = await signUp(email, password);
       if (error) throw error;
       router.push("/auth/sign-up-success");
     } catch (error: unknown) {
@@ -51,12 +44,7 @@ export function SignUpForm({
   };
 
   const handleGoogleLogin = async () => {
-    await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
-      },
-    });
+    await signInWithGoogle();
   };
 
   return (
@@ -92,7 +80,7 @@ export function SignUpForm({
                 <Input
                   id="email"
                   type="email"
-                  placeholder="sakura@sonata.io"
+                  placeholder="Enter your email"
                   className="rounded-xl bg-[#FFF9F9] border-pink-50 h-12"
                   required
                   value={email}
@@ -104,7 +92,7 @@ export function SignUpForm({
                 <Input
                   id="password"
                   type="password"
-                  placeholder="••••••••"
+                  placeholder="Create a password (6+ characters)"
                   className="rounded-xl bg-[#FFF9F9] border-pink-50 h-12"
                   required
                   value={password}

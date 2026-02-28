@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { createClient } from "@/lib/supabase/client";
+import { signInWithPassword, signInWithGoogle } from "@/lib/supabase/auth";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -26,18 +26,14 @@ export function LoginForm({
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
-  const supabase = createClient();
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.SubmitEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError(null);
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      const { error } = await signInWithPassword(email, password);
       if (error) throw error;
       router.push("/dashboard");
     } catch (error: unknown) {
@@ -49,12 +45,7 @@ export function LoginForm({
 
   // Logic for Google Login
   const handleGoogleLogin = async () => {
-    await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
-      },
-    });
+    await signInWithGoogle();
   };
 
   return (
@@ -102,7 +93,7 @@ export function LoginForm({
                 <Input
                   id="email"
                   type="email"
-                  placeholder="sakura@sonata.io"
+                  placeholder="Enter your email"
                   className="rounded-xl bg-[#FFF9F9] border-pink-50 h-12"
                   required
                   value={email}
@@ -122,7 +113,7 @@ export function LoginForm({
                 <Input
                   id="password"
                   type="password"
-                  placeholder="••••••••"
+                  placeholder="Enter your password"
                   className="rounded-xl bg-[#FFF9F9] border-pink-50 h-12"
                   required
                   value={password}
