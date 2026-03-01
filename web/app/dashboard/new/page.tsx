@@ -20,21 +20,16 @@ export default function NewCompositionPage() {
     }
   }, [isPending, session, router]);
 
-  if (isPending || !session) {
-    return (
-      <div className="min-h-screen w-full bg-[#FFF6EB] flex items-center justify-center">
-        <Loader2 className="w-10 h-10 text-pink-400 animate-spin" />
-      </div>
-    );
-  }
-
   const uploadFile = async (file: File) => {
     try {
       setStatus("Uploading...");
 
       // Quick client-side checks before hitting the server
       const name = file.name.toLowerCase();
-      const isMidi = file.type === "audio/midi" || name.endsWith(".mid") || name.endsWith(".midi");
+      const isMidi =
+        file.type === "audio/midi" ||
+        name.endsWith(".mid") ||
+        name.endsWith(".midi");
       if (!isMidi) {
         setStatus("Please upload a MIDI file (.mid or .midi).");
         return;
@@ -67,6 +62,14 @@ export default function NewCompositionPage() {
       setStatus(`Upload error: ${e?.message ?? "Unknown error"}`);
     }
   };
+
+  if (isPending || !session) {
+    return (
+      <div className="min-h-screen w-full bg-[#FFF6EB] flex items-center justify-center">
+        <Loader2 className="w-10 h-10 text-pink-400 animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="relative min-h-screen w-full bg-[#FFF6EB] flex flex-col items-center justify-center overflow-hidden p-6">
@@ -121,7 +124,9 @@ export default function NewCompositionPage() {
           <div className="p-4 bg-pink-50 rounded-full text-pink-400 group-hover:scale-110 transition-transform">
             <Upload className="w-10 h-10" />
           </div>
-          <p className="text-[#2D3142] font-medium text-lg">Drag & drop or click to upload</p>
+          <p className="text-[#2D3142] font-medium text-lg">
+            Drag & drop or click to upload
+          </p>
           <span className="text-sm text-slate-400">MIDI • Max 10MB</span>
         </div>
 

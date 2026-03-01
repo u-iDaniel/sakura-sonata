@@ -103,14 +103,6 @@ function TutorialContent() {
     }
   }, [isPending, session, router]);
 
-  if (isPending || !session) {
-    return (
-      <div className="min-h-screen w-full bg-[#FFF6EB] flex items-center justify-center">
-        <Loader2 className="w-10 h-10 text-pink-400 animate-spin" />
-      </div>
-    );
-  }
-
   // Stop audio playback when switching to the Practice tab
   const handleTabChange = useCallback(
     (tab: string) => {
@@ -198,6 +190,14 @@ function TutorialContent() {
             Back to Dashboard
           </Link>
         </div>
+      </div>
+    );
+  }
+
+  if (isPending || !session) {
+    return (
+      <div className="min-h-screen w-full bg-[#FFF6EB] flex items-center justify-center">
+        <Loader2 className="w-10 h-10 text-pink-400 animate-spin" />
       </div>
     );
   }

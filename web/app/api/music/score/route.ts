@@ -18,12 +18,15 @@ export async function GET(request: Request) {
   const id = searchParams.get("id");
 
   if (!id) {
-    return Response.json({ error: "id query parameter is required" }, { status: 400 });
+    return Response.json(
+      { error: "id query parameter is required" },
+      { status: 400 },
+    );
   }
 
   const { data, error } = await supabase
     .from(SCORES_TABLE)
-    .select("id, title, file_url")
+    .select("id, title, file_path")
     .eq("id", id)
     .eq("user_id", session.user.id)
     .single();
@@ -46,20 +49,32 @@ export async function POST(request: Request) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { title, file_url } = await request.json();
+  const { title, file_path } = await request.json();
 
-  if (!file_url) {
-    return Response.json({ error: "file_url is required" }, { status: 400 });
+  if (!file_path) {
+    return Response.json({ error: "file_path is required" }, { status: 400 });
+  }
+
+  // Check that file_path belongs to our storage bucket
+  if (
+    !file_path.includes(process.env.S3_ENDPOINT || "") ||
+    !file_path.includes(MIDI_BUCKET)
+  ) {
+    console.error("Invalid file_path:", file_path);
+    return Response.json(
+      { error: "file_path must be a valid URL" },
+      { status: 400 },
+    );
   }
 
   const { data, error } = await supabase
     .from(SCORES_TABLE)
     .insert({
       title,
-      file_url,
+      file_path,
       user_id: session.user.id,
     })
-    .select("id, title, file_url");
+    .select("id, title, file_path");
 
   if (error) {
     console.error("Error creating score:", error);
@@ -87,7 +102,7 @@ export async function DELETE(request: Request) {
 
   const { data: existingScore, error: fetchError } = await supabase
     .from(SCORES_TABLE)
-    .select("id,file_url,user_id")
+    .select("id,file_path,user_id")
     .eq("id", id)
     .eq("user_id", session.user.id)
     .single();
@@ -105,19 +120,27 @@ export async function DELETE(request: Request) {
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  if (existingScore.file_url) {
-    const filePath = toStoragePath(existingScore.file_url);
+  if (existingScore.file_path) {
+    const filePath = toStoragePath(existingScore.file_path);
 
     if (!filePath) {
-      console.error("Could not extract storage path from file_url:", existingScore.file_url);
+      console.error(
+        "Could not extract storage path from file_path:",
+        existingScore.file_path,
+      );
       return Response.json({ error: "Invalid file URL" }, { status: 400 });
     }
 
-    const { error: storageErr } = await supabase.storage.from(MIDI_BUCKET).remove([filePath]);
+    const { error: storageErr } = await supabase.storage
+      .from(MIDI_BUCKET)
+      .remove([filePath]);
 
     if (storageErr) {
       console.error("Error deleting file from storage:", storageErr);
-      return Response.json({ error: "Failed to delete associated file" }, { status: 500 });
+      return Response.json(
+        { error: "Failed to delete associated file" },
+        { status: 500 },
+      );
     }
   }
 

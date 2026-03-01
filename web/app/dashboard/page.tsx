@@ -11,7 +11,7 @@ import { authClient } from "@/lib/auth-client";
 type Score = {
   id: string;
   title: string | null;
-  file_url: string | null;
+  file_path: string | null;
   created_at: string | null;
   user_id?: string | null;
 };
@@ -30,21 +30,15 @@ export default function DashboardPage() {
     }
   }, [isPending, session, router]);
 
-  if (isPending || !session) {
-    return (
-      <div className="min-h-screen w-full bg-[#FFF6EB] flex items-center justify-center">
-        <Loader2 className="w-10 h-10 text-pink-400 animate-spin" />
-      </div>
-    );
-  }
-
   useEffect(() => {
     const fetchScores = async () => {
       try {
         const res = await fetch("/api/music/scores");
         if (!res.ok) {
           const errorData = await res.json();
-          errorData?.error ? setErrorText(errorData.error) : setErrorText("Failed to fetch scores");
+          errorData?.error
+            ? setErrorText(errorData.error)
+            : setErrorText("Failed to fetch scores");
           setLoading(false);
           return;
         }
@@ -86,6 +80,14 @@ export default function DashboardPage() {
     }
   };
 
+  if (isPending || !session) {
+    return (
+      <div className="min-h-screen w-full bg-[#FFF6EB] flex items-center justify-center">
+        <Loader2 className="w-10 h-10 text-pink-400 animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <div className="relative flex h-screen w-screen font-inter bg-sakura-bg">
       {/* Sakura petals background (behind everything) */}
@@ -94,9 +96,14 @@ export default function DashboardPage() {
       {/* Foreground content */}
       <div className="relative z-10 h-full w-full overflow-hidden">
         <div className="absolute top-6 left-8 right-8 z-20 flex justify-between items-center">
-          <Link href="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+          <Link
+            href="/"
+            className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+          >
             <span className="text-2xl text-pink-400">✦</span>
-            <span className="text-[#2D3142] text-3xl font-fasthand">Sakura Sonata</span>
+            <span className="text-[#2D3142] text-3xl font-fasthand">
+              Sakura Sonata
+            </span>
           </Link>
           <LogoutButton
             label="Log out"
@@ -106,8 +113,12 @@ export default function DashboardPage() {
 
         <main className="h-full p-10 pb-32 overflow-y-auto scrollbar-hide">
           <div className="mb-8 mt-20">
-            <h1 className="text-5xl font-bold text-sakura-text-pink mb-2">My Sonatas</h1>
-            <p className="text-sakura-dark/50 text-lg">Your collection of music compositions</p>
+            <h1 className="text-5xl font-bold text-sakura-text-pink mb-2">
+              My Sonatas
+            </h1>
+            <p className="text-sakura-dark/50 text-lg">
+              Your collection of music compositions
+            </p>
           </div>
 
           {loading ? (
@@ -154,12 +165,16 @@ export default function DashboardPage() {
 
                     <div className="flex justify-between items-center">
                       <p className="text-sakura-dark/40 text-xs">
-                        {score.created_at ? new Date(score.created_at).toLocaleDateString() : ""}
+                        {score.created_at
+                          ? new Date(score.created_at).toLocaleDateString()
+                          : ""}
                       </p>
 
                       <div className="flex items-center gap-2">
                         {deletingId === score.id ? (
-                          <span className="text-xs text-sakura-dark/40">Deleting…</span>
+                          <span className="text-xs text-sakura-dark/40">
+                            Deleting…
+                          </span>
                         ) : null}
                       </div>
                     </div>

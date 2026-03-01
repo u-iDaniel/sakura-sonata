@@ -15,7 +15,7 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from(SCORES_TABLE)
-    .select("id,title,file_url,created_at,user_id")
+    .select("id,title,file_path,created_at,user_id")
     .eq("user_id", session.user.id)
     .order("created_at", { ascending: false });
 

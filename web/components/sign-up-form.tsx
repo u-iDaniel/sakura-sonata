@@ -34,7 +34,11 @@ export function SignUpForm({
 
     try {
       const { error } = await signUp(email, password);
-      if (error) throw error;
+      if (error?.message) {
+        throw new Error(error.message);
+      } else if (error) {
+        throw new Error("An unknown error occurred during sign up.");
+      }
 
       router.push("/dashboard");
       // Uncomment below line if we ever add email verification and remove the redirect to /dashboard
@@ -110,7 +114,7 @@ export function SignUpForm({
                 <Input
                   id="password"
                   type="password"
-                  placeholder="Create a password (6+ characters)"
+                  placeholder="Create a password (8+ characters)"
                   className="rounded-xl bg-[#FFF9F9] border-pink-50 h-12"
                   required
                   value={password}
