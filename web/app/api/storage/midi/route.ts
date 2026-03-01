@@ -76,7 +76,9 @@ export async function POST(request: Request) {
   }
 
   // Get the public URL for the uploaded file
-  const { data: urlData } = supabase.storage.from(MIDI_BUCKET).getPublicUrl(uploadData.path);
+  const { data: urlData } = supabase.storage
+    .from(MIDI_BUCKET)
+    .getPublicUrl(uploadData.path);
 
   const fileUrl = urlData.publicUrl;
 
@@ -87,12 +89,15 @@ export async function POST(request: Request) {
     id: scoreId,
     user_id: userId,
     title: safeName,
-    file_url: fileUrl,
+    file_path: fileUrl,
   });
 
   if (scoreError) {
     console.error("Score insert error:", scoreError);
-    return Response.json({ error: "Failed to save score record" }, { status: 500 });
+    return Response.json(
+      { error: "Failed to save score record" },
+      { status: 500 },
+    );
   }
 
   return Response.json({ scoreId, fileUrl }, { status: 201 });
