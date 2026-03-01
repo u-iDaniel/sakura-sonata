@@ -1,9 +1,18 @@
 "use client";
 
 import { Suspense, useState, useCallback, useEffect } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft, Loader2, Music, Piano, Maximize2, Minimize2, Volume2, Gamepad2 } from "lucide-react";
+import {
+  ChevronLeft,
+  Loader2,
+  Music,
+  Piano,
+  Maximize2,
+  Minimize2,
+  Volume2,
+  Gamepad2,
+} from "lucide-react";
 import { SakuraBackground } from "@/components/SakuraBackground";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
@@ -22,6 +31,7 @@ import { PlaybackSpeedControl } from "@/components/PlaybackSpeedControl";
 import { useMidiPlayer } from "@/lib/hooks/useMidiPlayer";
 import type { PianoPlayerFactory } from "@/lib/piano";
 import { splendidPiano, salamanderPiano, soundfontPiano } from "@/lib/piano";
+import { authClient } from "@/lib/auth-client";
 
 export default function TutorialPage() {
   return (
@@ -37,30 +47,80 @@ export default function TutorialPage() {
   );
 }
 
-const PIANO_OPTIONS: { value: string; label: string; description: string; factory: PianoPlayerFactory }[] = [
-  { value: "splendid", label: "Splendid Grand", description: "Rich SoundFont piano", factory: splendidPiano },
-  { value: "salamander", label: "Salamander", description: "Clean sampled piano", factory: salamanderPiano },
-  { value: "soundfont", label: "Gentle", description: "Soft MusyngKite SoundFont", factory: soundfontPiano },
+const PIANO_OPTIONS: {
+  value: string;
+  label: string;
+  description: string;
+  factory: PianoPlayerFactory;
+}[] = [
+  {
+    value: "splendid",
+    label: "Splendid Grand",
+    description: "Rich SoundFont piano",
+    factory: splendidPiano,
+  },
+  {
+    value: "salamander",
+    label: "Salamander",
+    description: "Clean sampled piano",
+    factory: salamanderPiano,
+  },
+  {
+    value: "soundfont",
+    label: "Gentle",
+    description: "Soft MusyngKite SoundFont",
+    factory: soundfontPiano,
+  },
 ];
 
 function TutorialContent() {
   const params = useParams<{ id: string }>();
   const id = params?.id;
+  const router = useRouter();
+  const { data: session, isPending } = authClient.useSession();
   const [pianoKey, setPianoKey] = useState("splendid");
   const pianoFactory = PIANO_OPTIONS.find((o) => o.value === pianoKey)!.factory;
   const { state, controls, refs } = useMidiPlayer(id, pianoFactory);
-  const { loadState, error, title, bpm, noteCount, trackCount, duration, keySignature, timeSignature, playbackSpeed } = state;
+  const {
+    loadState,
+    error,
+    title,
+    bpm,
+    noteCount,
+    trackCount,
+    duration,
+    keySignature,
+    timeSignature,
+    playbackSpeed,
+  } = state;
   const { formatTime, setPlaybackSpeed } = controls;
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [activeTab, setActiveTab] = useState("falling-notes");
 
-  // Stop audio playback when switching to the Practice tab
-  const handleTabChange = useCallback((tab: string) => {
-    setActiveTab(tab);
-    if (tab === "practice" && state.isPlaying) {
-      controls.stopPlayback();
+  useEffect(() => {
+    if (!isPending && !session) {
+      router.replace("/auth/login");
     }
-  }, [state.isPlaying, controls]);
+  }, [isPending, session, router]);
+
+  if (isPending || !session) {
+    return (
+      <div className="min-h-screen w-full bg-[#FFF6EB] flex items-center justify-center">
+        <Loader2 className="w-10 h-10 text-pink-400 animate-spin" />
+      </div>
+    );
+  }
+
+  // Stop audio playback when switching to the Practice tab
+  const handleTabChange = useCallback(
+    (tab: string) => {
+      setActiveTab(tab);
+      if (tab === "practice" && state.isPlaying) {
+        controls.stopPlayback();
+      }
+    },
+    [state.isPlaying, controls],
+  );
 
   const pianoSwitcherEl = (
     <DropdownMenu>
@@ -211,7 +271,8 @@ function TutorialContent() {
           {loadState === "ready" && !isFullscreen && (
             <p className="text-sm text-slate-400">
               {trackCount} track{trackCount !== 1 && "s"} · {noteCount} notes ·{" "}
-              {bpm} BPM · {timeSignature} · {keySignature} · {formatTime(duration)}
+              {bpm} BPM · {timeSignature} · {keySignature} ·{" "}
+              {formatTime(duration)}
             </p>
           )}
         </div>
@@ -220,96 +281,98 @@ function TutorialContent() {
         {loadState === "loading" && (
           <div className="flex flex-col items-center justify-center py-12 gap-3">
             <Loader2 className="w-10 h-10 text-pink-400 animate-spin" />
-            <p className="text-slate-400 text-sm">
-              Loading piano samples…
-            </p>
+            <p className="text-slate-400 text-sm">Loading piano samples…</p>
           </div>
         )}
 
         {/* Tabs */}
         {loadState === "ready" && (
           <>
-          <Tabs
-            defaultValue="falling-notes"
-            onValueChange={handleTabChange}
-            className={`w-full ${
-              isFullscreen ? "flex-1 flex flex-col min-h-0" : ""
-            }`}
-          >
-            <TabsList className="w-full justify-center bg-pink-50/80 border border-pink-100 rounded-xl p-1 shrink-0">
-              <TabsTrigger
+            <Tabs
+              defaultValue="falling-notes"
+              onValueChange={handleTabChange}
+              className={`w-full ${
+                isFullscreen ? "flex-1 flex flex-col min-h-0" : ""
+              }`}
+            >
+              <TabsList className="w-full justify-center bg-pink-50/80 border border-pink-100 rounded-xl p-1 shrink-0">
+                <TabsTrigger
+                  value="falling-notes"
+                  className="flex-1 gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-pink-600 data-[state=active]:shadow-sm text-slate-500 transition-all text-sm"
+                >
+                  <Piano className="w-4 h-4" />
+                  Falling Notes
+                </TabsTrigger>
+                <TabsTrigger
+                  value="audio-player"
+                  className="flex-1 gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-pink-600 data-[state=active]:shadow-sm text-slate-500 transition-all text-sm"
+                >
+                  <Music className="w-4 h-4" />
+                  Audio Player
+                </TabsTrigger>
+                <TabsTrigger
+                  value="practice"
+                  className="flex-1 gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-pink-600 data-[state=active]:shadow-sm text-slate-500 transition-all text-sm"
+                >
+                  <Gamepad2 className="w-4 h-4" />
+                  Practice
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent
                 value="falling-notes"
-                className="flex-1 gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-pink-600 data-[state=active]:shadow-sm text-slate-500 transition-all text-sm"
+                className={`${
+                  isFullscreen
+                    ? "flex-1 min-h-0 relative overflow-hidden"
+                    : "mt-4"
+                }`}
               >
-                <Piano className="w-4 h-4" />
-                Falling Notes
-              </TabsTrigger>
-              <TabsTrigger
-                value="audio-player"
-                className="flex-1 gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-pink-600 data-[state=active]:shadow-sm text-slate-500 transition-all text-sm"
-              >
-                <Music className="w-4 h-4" />
-                Audio Player
-              </TabsTrigger>
-              <TabsTrigger
+                <FallingNotesTab
+                  state={state}
+                  controls={controls}
+                  isFullscreen={isFullscreen}
+                  pianoSwitcher={pianoSwitcherEl}
+                  playbackSpeed={playbackSpeed}
+                  midiRef={refs.midiRef}
+                  pianoFactory={pianoFactory}
+                />
+              </TabsContent>
+
+              <TabsContent value="audio-player" className="mt-4">
+                <AudioPlayerTab
+                  state={state}
+                  controls={controls}
+                  pianoSwitcher={pianoSwitcherEl}
+                />
+              </TabsContent>
+
+              <TabsContent
                 value="practice"
-                className="flex-1 gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-pink-600 data-[state=active]:shadow-sm text-slate-500 transition-all text-sm"
+                className={`${
+                  isFullscreen
+                    ? "flex-1 min-h-0 relative overflow-hidden"
+                    : "mt-4"
+                }`}
               >
-                <Gamepad2 className="w-4 h-4" />
-                Practice
-              </TabsTrigger>
-            </TabsList>
+                <PracticeTab
+                  state={state}
+                  controls={controls}
+                  refs={refs}
+                  isFullscreen={isFullscreen}
+                  pianoSwitcher={pianoSwitcherEl}
+                  playbackSpeed={playbackSpeed}
+                />
+              </TabsContent>
+            </Tabs>
 
-            <TabsContent
-              value="falling-notes"
-              className={`${
-                isFullscreen
-                  ? "flex-1 min-h-0 relative overflow-hidden"
-                  : "mt-4"
-              }`}
-            >
-              <FallingNotesTab
-                state={state}
-                controls={controls}
-                isFullscreen={isFullscreen}
-                pianoSwitcher={pianoSwitcherEl}
+            {/* Playback speed control */}
+            <div className="mt-4">
+              <PlaybackSpeedControl
                 playbackSpeed={playbackSpeed}
-                midiRef={refs.midiRef}
-                pianoFactory={pianoFactory}
+                setPlaybackSpeed={setPlaybackSpeed}
+                originalBpm={bpm}
               />
-            </TabsContent>
-
-            <TabsContent value="audio-player" className="mt-4">
-              <AudioPlayerTab state={state} controls={controls} pianoSwitcher={pianoSwitcherEl} />
-            </TabsContent>
-
-            <TabsContent
-              value="practice"
-              className={`${
-                isFullscreen
-                  ? "flex-1 min-h-0 relative overflow-hidden"
-                  : "mt-4"
-              }`}
-            >
-              <PracticeTab
-                state={state}
-                controls={controls}
-                refs={refs}
-                isFullscreen={isFullscreen}
-                pianoSwitcher={pianoSwitcherEl}
-                playbackSpeed={playbackSpeed}
-              />
-            </TabsContent>
-          </Tabs>
-
-          {/* Playback speed control */}
-          <div className="mt-4">
-            <PlaybackSpeedControl
-              playbackSpeed={playbackSpeed}
-              setPlaybackSpeed={setPlaybackSpeed}
-              originalBpm={bpm}
-            />
-          </div>
+            </div>
           </>
         )}
       </div>

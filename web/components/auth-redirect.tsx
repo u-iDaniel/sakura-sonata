@@ -1,4 +1,5 @@
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 /**
@@ -6,11 +7,10 @@ import { redirect } from "next/navigation";
  * Must be wrapped in <Suspense> since it accesses cookies (runtime data).
  */
 export async function AuthRedirect() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (user) {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  });
+  if (session) {
     redirect("/dashboard");
   }
   return null;

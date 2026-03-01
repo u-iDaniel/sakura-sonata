@@ -7,6 +7,11 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get("code");
   const next = searchParams.get("next") ?? "/dashboard";
 
+  // Validate next starts up "/" or something so we don't redirect the user to ?next="https://MWAHAHAHA.com"
+  if (next && !next.startsWith("/")) {
+    return NextResponse.redirect(`${origin}/auth/login?error=Invalid next parameter`);
+  }
+
   if (code) {
     const supabase = await createClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);

@@ -89,6 +89,7 @@ export async function DELETE(request: Request) {
     .from(SCORES_TABLE)
     .select("id,file_url,user_id")
     .eq("id", id)
+    .eq("user_id", session.user.id)
     .single();
 
   if (!existingScore) {
@@ -120,7 +121,11 @@ export async function DELETE(request: Request) {
     }
   }
 
-  const { error: deleteError } = await supabase.from(SCORES_TABLE).delete().eq("id", id);
+  const { error: deleteError } = await supabase
+    .from(SCORES_TABLE)
+    .delete()
+    .eq("id", id)
+    .eq("user_id", session.user.id);
 
   if (deleteError) {
     console.error("Error deleting score:", deleteError);

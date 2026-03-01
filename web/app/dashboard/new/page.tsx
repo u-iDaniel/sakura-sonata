@@ -1,16 +1,32 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { SakuraBackground } from "@/components/SakuraBackground";
 import Link from "next/link";
-import { Upload } from "lucide-react";
+import { Upload, Loader2 } from "lucide-react";
 import { ChevronLeft } from "lucide-react";
+import { authClient } from "@/lib/auth-client";
 
 export default function NewCompositionPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [status, setStatus] = useState<string>("");
   const router = useRouter();
+  const { data: session, isPending } = authClient.useSession();
+
+  useEffect(() => {
+    if (!isPending && !session) {
+      router.replace("/auth/login");
+    }
+  }, [isPending, session, router]);
+
+  if (isPending || !session) {
+    return (
+      <div className="min-h-screen w-full bg-[#FFF6EB] flex items-center justify-center">
+        <Loader2 className="w-10 h-10 text-pink-400 animate-spin" />
+      </div>
+    );
+  }
 
   const uploadFile = async (file: File) => {
     try {

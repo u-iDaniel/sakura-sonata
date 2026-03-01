@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { LogoutButton } from "@/components/logout-button";
 import Link from "next/link";
 import { SakuraBackground } from "@/components/SakuraBackground";
+import { authClient } from "@/lib/auth-client";
 
 type Score = {
   id: string;
@@ -21,6 +22,21 @@ export default function DashboardPage() {
   const [errorText, setErrorText] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const router = useRouter();
+  const { data: session, isPending } = authClient.useSession();
+
+  useEffect(() => {
+    if (!isPending && !session) {
+      router.replace("/auth/login");
+    }
+  }, [isPending, session, router]);
+
+  if (isPending || !session) {
+    return (
+      <div className="min-h-screen w-full bg-[#FFF6EB] flex items-center justify-center">
+        <Loader2 className="w-10 h-10 text-pink-400 animate-spin" />
+      </div>
+    );
+  }
 
   useEffect(() => {
     const fetchScores = async () => {
