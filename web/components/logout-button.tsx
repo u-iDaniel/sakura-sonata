@@ -1,6 +1,6 @@
 "use client";
 
-import { signOut } from "@/lib/supabase/auth";
+import { signOut } from "@/lib/better-auth/auth";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
@@ -10,7 +10,10 @@ type LogoutButtonProps = {
   label?: string;
 };
 
-export function LogoutButton({ className, label = "Logout" }: LogoutButtonProps) {
+export function LogoutButton({
+  className,
+  label = "Logout",
+}: LogoutButtonProps) {
   const router = useRouter();
 
   const logout = async () => {

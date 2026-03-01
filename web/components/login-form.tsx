@@ -1,7 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { signInWithPassword, signInWithGoogle } from "@/lib/supabase/auth";
+import { signInWithPassword, signInWithGoogle } from "@/lib/better-auth/auth";
 import { Button } from "@/components/ui/button";
 import {
   Card,
