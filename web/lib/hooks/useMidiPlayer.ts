@@ -22,6 +22,8 @@ export interface NoteEvent {
 
 export interface MidiPlayerState {
   loadState: LoadState;
+  /** True while a piano sampler swap is in progress (MIDI data stays loaded). */
+  pianoLoading: boolean;
   error: string;
   title: string;
   isPlaying: boolean;
@@ -56,6 +58,7 @@ export function useMidiPlayer(
   pianoFactory: PianoPlayerFactory = splendidPiano,
 ) {
   const [loadState, setLoadState] = useState<LoadState>("loading");
+  const [pianoLoading, setPianoLoading] = useState(false);
   const [error, setError] = useState("");
   const [title, setTitle] = useState("");
   const [isPlaying, setIsPlaying] = useState(false);
@@ -173,12 +176,21 @@ export function useMidiPlayer(
 
     let cancelled = false;
 
+    // Is this the initial piano load or a subsequent swap?
+    const isSwap = loadState === "ready";
+
     async function initPiano() {
       // Tear down any previous piano & playback
       stopPlayback();
       pianoRef.current?.dispose();
       pianoRef.current = null;
-      setLoadState("loading");
+
+      if (isSwap) {
+        // Keep loadState "ready" so canvases stay mounted; use pianoLoading instead
+        setPianoLoading(true);
+      } else {
+        setLoadState("loading");
+      }
       setError("");
 
       try {
@@ -193,11 +205,20 @@ export function useMidiPlayer(
 
         pianoRef.current = piano;
         disposedRef.current = false;
-        setLoadState("ready");
+
+        if (isSwap) {
+          setPianoLoading(false);
+        } else {
+          setLoadState("ready");
+        }
       } catch {
         if (!cancelled) {
           setError("Failed to load piano samples.");
-          setLoadState("error");
+          if (isSwap) {
+            setPianoLoading(false);
+          } else {
+            setLoadState("error");
+          }
         }
       }
     }
@@ -476,6 +497,7 @@ export function useMidiPlayer(
   return {
     state: {
       loadState,
+      pianoLoading,
       error,
       title,
       isPlaying,

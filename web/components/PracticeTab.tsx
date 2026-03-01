@@ -1,7 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useCallback, useMemo, useState } from "react";
-import { Play, Pause, RotateCcw, Sparkles, Loader2, ChevronDown, ChevronUp, SkipForward } from "lucide-react";
+import {
+  Play,
+  Pause,
+  RotateCcw,
+  Sparkles,
+  Loader2,
+  ChevronDown,
+  ChevronUp,
+  SkipForward,
+  Minimize2,
+  Maximize2,
+} from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import type {
   MidiPlayerState,
@@ -10,9 +21,6 @@ import type {
   NoteEvent,
 } from "@/lib/hooks/useMidiPlayer";
 import { usePracticeMode } from "@/lib/hooks/usePracticeMode";
-// NOTE: keep your existing import — we won’t change practice logic.
-// If you still want to use it elsewhere, leave it.
-// import { buildPracticePrompt } from "@/lib/piano/midi-helpers";
 import type { FlowingJudgment } from "@/lib/piano/midi-helpers";
 import {
   isBlackKey,
@@ -29,6 +37,13 @@ import {
   EXPECTED_KEY_COLOR,
   WRONG_KEY_COLOR,
 } from "@/lib/piano/canvas-utils";
+import { FullscreenOverlay } from "@/components/FullscreenOverlay";
+import {
+  FullscreenSettingsMenu,
+  SettingsRadioItem,
+  type SettingsMenuItem,
+} from "@/components/FullscreenSettingsMenu";
+import type { PianoOption } from "@/components/FallingNotesTab";
 
 // ── Constants ─────────────────────────────────────────────────────────
 
@@ -50,6 +65,20 @@ interface PracticeTabProps {
   isFullscreen?: boolean;
   pianoSwitcher?: React.ReactNode;
   playbackSpeed?: number;
+  /** Fullscreen settings – exit callback */
+  onExitFullscreen?: () => void;
+  /** Fullscreen settings – playback speed setter */
+  setPlaybackSpeed?: (speed: number) => void;
+  /** Fullscreen settings – original BPM */
+  originalBpm?: number;
+  /** Fullscreen settings – available piano samplers */
+  pianoOptions?: PianoOption[];
+  /** Fullscreen settings – currently selected piano key */
+  pianoKey?: string;
+  /** Fullscreen settings – piano key setter */
+  setPianoKey?: (key: string) => void;
+  /** Toggle fullscreen mode (for normal mode button) */
+  toggleFullscreen?: () => void;
 }
 
 // ── In-memory summary (no DB) ─────────────────────────────────────────
@@ -81,7 +110,14 @@ function buildPracticeSummary(args: {
   mode: "discrete" | "continuous" | "flowing";
   playbackSpeed: number;
 }): PracticeSummary {
-  const { sessionLog, totalSteps, flowingTotalNotes, pieceTitle, mode, playbackSpeed } = args;
+  const {
+    sessionLog,
+    totalSteps,
+    flowingTotalNotes,
+    pieceTitle,
+    mode,
+    playbackSpeed,
+  } = args;
 
   const wrongByMidi = new Map<number, number>();
   const missedByMidi = new Map<number, number>();
@@ -112,7 +148,11 @@ function buildPracticeSummary(args: {
     }
 
     // Fix 2: use actual sessionLog field names
-    if (typeof e?.playedMidi === "number" && e.playedMidi !== 0 && e?.rating !== "miss") {
+    if (
+      typeof e?.playedMidi === "number" &&
+      e.playedMidi !== 0 &&
+      e?.rating !== "miss"
+    ) {
       wrongByMidi.set(e.playedMidi, (wrongByMidi.get(e.playedMidi) ?? 0) + 1);
     }
 
@@ -136,11 +176,20 @@ function buildPracticeSummary(args: {
   // flowingCorrect / (flowingCorrect + flowingMissed + flowingExtra)
   // This accounts for extra/wrong notes the student played, matching the on-screen %.
   if (mode === "flowing") {
-    const flowingCorrect = sessionLog.filter((e: any) => e.rating && e.rating !== "miss" && e.correct).length;
-    const flowingMissed = sessionLog.filter((e: any) => e.rating === "miss").length;
-    const flowingExtra = sessionLog.filter((e: any) => e.rating === undefined && !e.correct).length;
+    const flowingCorrect = sessionLog.filter(
+      (e: any) => e.rating && e.rating !== "miss" && e.correct,
+    ).length;
+    const flowingMissed = sessionLog.filter(
+      (e: any) => e.rating === "miss",
+    ).length;
+    const flowingExtra = sessionLog.filter(
+      (e: any) => e.rating === undefined && !e.correct,
+    ).length;
     const flowingEvaluated = flowingCorrect + flowingMissed + flowingExtra;
-    const accuracyPct = flowingEvaluated > 0 ? Math.round((flowingCorrect / flowingEvaluated) * 100) : 100;
+    const accuracyPct =
+      flowingEvaluated > 0
+        ? Math.round((flowingCorrect / flowingEvaluated) * 100)
+        : 100;
 
     const topN = (m: Map<number, number>) =>
       [...m.entries()]
@@ -172,7 +221,10 @@ function buildPracticeSummary(args: {
   }
 
   const accuracyDenominator = attempts;
-  const accuracyPct = accuracyDenominator > 0 ? Math.round((hits / accuracyDenominator) * 100) : 0;
+  const accuracyPct =
+    accuracyDenominator > 0
+      ? Math.round((hits / accuracyDenominator) * 100)
+      : 0;
 
   const topN = (m: Map<number, number>) =>
     [...m.entries()]
@@ -206,6 +258,8 @@ function buildPracticeSummary(args: {
 
 // ── Component ─────────────────────────────────────────────────────────
 
+const SPEED_PRESETS = [0.1, 0.25, 0.5, 0.75, 1, 1.5, 2] as const;
+
 export function PracticeTab({
   state,
   controls,
@@ -213,12 +267,28 @@ export function PracticeTab({
   isFullscreen = false,
   pianoSwitcher,
   playbackSpeed = 1,
+  onExitFullscreen,
+  setPlaybackSpeed,
+  originalBpm,
+  pianoOptions,
+  pianoKey,
+  setPianoKey,
+  toggleFullscreen,
 }: PracticeTabProps) {
-  const { loadState, duration } = state;
-  const { formatTime, getAllNotes, stopPlayback, togglePlayback, seekTo } = controls;
+  const { loadState, duration, pianoLoading } = state;
+  const { formatTime, getAllNotes, stopPlayback, togglePlayback, seekTo } =
+    controls;
   const { midiRef, pianoRef } = refs;
 
-  const layoutInfoRef = useRef<{ W: number; hitY: number; lo: number; hi: number; whiteCount: number } | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  const layoutInfoRef = useRef<{
+    W: number;
+    hitY: number;
+    lo: number;
+    hi: number;
+    whiteCount: number;
+  } | null>(null);
 
   const {
     state: practiceState,
@@ -228,7 +298,13 @@ export function PracticeTab({
     judgmentsRef,
     flowingAllNotesRef,
     flowingMatchedRef,
-  } = usePracticeMode(midiRef, pianoRef, getAllNotes, layoutInfoRef, playbackSpeed);
+  } = usePracticeMode(
+    midiRef,
+    pianoRef,
+    getAllNotes,
+    layoutInfoRef,
+    playbackSpeed,
+  );
 
   const {
     status,
@@ -249,7 +325,14 @@ export function PracticeTab({
     flowingTotalNotes,
   } = practiceState;
 
-  const { start, reset, skipStep, setActiveDevice, setPracticeMode, togglePause } = practiceControls;
+  const {
+    start,
+    reset,
+    skipStep,
+    setActiveDevice,
+    setPracticeMode,
+    togglePause,
+  } = practiceControls;
 
   // ── AI Feedback state (added; does not affect practice logic) ───────
   const [feedbackText, setFeedbackText] = useState<string | null>(null);
@@ -327,10 +410,14 @@ export function PracticeTab({
   }, [status]);
 
   const heldNotesRef = useRef(heldNotes);
-  useEffect(() => { heldNotesRef.current = heldNotes; }, [heldNotes]);
+  useEffect(() => {
+    heldNotesRef.current = heldNotes;
+  }, [heldNotes]);
 
   const practiceModeRef = useRef(practiceMode);
-  useEffect(() => { practiceModeRef.current = practiceMode; }, [practiceMode]);
+  useEffect(() => {
+    practiceModeRef.current = practiceMode;
+  }, [practiceMode]);
 
   // ── Resize observer ─────────────────────────────────────────────
   useEffect(() => {
@@ -377,7 +464,15 @@ export function PracticeTab({
     setFeedbackText(null);
     setFeedbackError(null);
     setShowFeedback(false);
-  }, [stopPlayback, start, practiceMode, togglePlayback, getAllNotes, seekTo, midiDevices.length]);
+  }, [
+    stopPlayback,
+    start,
+    practiceMode,
+    togglePlayback,
+    getAllNotes,
+    seekTo,
+    midiDevices.length,
+  ]);
 
   // ── Stop audio when resetting ───────────────────────────────────
   const handleReset = useCallback(() => {
@@ -418,7 +513,14 @@ export function PracticeTab({
     } finally {
       setFeedbackLoading(false);
     }
-  }, [sessionLog, totalSteps, flowingTotalNotes, practiceMode, state.title, playbackSpeed]);
+  }, [
+    sessionLog,
+    totalSteps,
+    flowingTotalNotes,
+    practiceMode,
+    state.title,
+    playbackSpeed,
+  ]);
 
   // ── Render loop ─────────────────────────────────────────────────
   const draw = useCallback(() => {
@@ -435,7 +537,13 @@ export function PracticeTab({
     const playAreaHeight = H - kbHeight;
     const hitY = playAreaHeight;
 
-    layoutInfoRef.current = { W, hitY, lo: layout.lo, hi: layout.hi, whiteCount: layout.whiteCount };
+    layoutInfoRef.current = {
+      W,
+      hitY,
+      lo: layout.lo,
+      hi: layout.hi,
+      whiteCount: layout.whiteCount,
+    };
 
     // Use practice clock instead of Tone.Transport
     const currentTime = practiceTimeRef.current;
@@ -481,7 +589,11 @@ export function PracticeTab({
       // Determine note color — highlight expected notes at the hit line (not in flowing mode)
       let fillAlpha = 0.85;
       let isExpectedNote = false;
-      if (!isFlowing && curExpected.has(note.midi) && Math.abs(note.time - currentTime) < 0.05) {
+      if (
+        !isFlowing &&
+        curExpected.has(note.midi) &&
+        Math.abs(note.time - currentTime) < 0.05
+      ) {
         isExpectedNote = true;
         fillAlpha = 1;
       }
@@ -516,9 +628,10 @@ export function PracticeTab({
     }
 
     // ── Hit line ──────────────────────────────────────────────────
-    const hitLineColor = !isFlowing && curStatus === "waiting"
-      ? "rgba(239,68,68,0.6)"
-      : HIT_LINE_COLOR;
+    const hitLineColor =
+      !isFlowing && curStatus === "waiting"
+        ? "rgba(239,68,68,0.6)"
+        : HIT_LINE_COLOR;
     ctx.fillStyle = hitLineColor;
     ctx.fillRect(0, hitY - 1, W, 2);
 
@@ -739,13 +852,18 @@ export function PracticeTab({
   const isFlowingMode = practiceMode === "flowing";
 
   // Flowing mode stats
-  const flowingCorrect = sessionLog.filter((e) => e.rating && e.rating !== "miss" && e.correct).length;
+  const flowingCorrect = sessionLog.filter(
+    (e) => e.rating && e.rating !== "miss" && e.correct,
+  ).length;
   const flowingMissed = sessionLog.filter((e) => e.rating === "miss").length;
-  const flowingExtra = sessionLog.filter((e) => e.rating === undefined && !e.correct).length;
+  const flowingExtra = sessionLog.filter(
+    (e) => e.rating === undefined && !e.correct,
+  ).length;
   const flowingEvaluated = flowingCorrect + flowingMissed + flowingExtra;
-  const flowingAccuracy = flowingEvaluated > 0
-    ? Math.round((flowingCorrect / flowingEvaluated) * 100)
-    : 100;
+  const flowingAccuracy =
+    flowingEvaluated > 0
+      ? Math.round((flowingCorrect / flowingEvaluated) * 100)
+      : 100;
   const ratingCounts = { perfect: 0, great: 0, okay: 0, poor: 0 };
   for (const e of sessionLog) {
     if (e.rating && e.rating !== "miss" && e.rating in ratingCounts) {
@@ -754,7 +872,8 @@ export function PracticeTab({
   }
 
   // Discrete/continuous mode stats
-  const progressPct = totalSteps > 0 ? Math.round((currentStepIndex / totalSteps) * 100) : 0;
+  const progressPct =
+    totalSteps > 0 ? Math.round((currentStepIndex / totalSteps) * 100) : 0;
   const correctCount = sessionLog.filter((e) => e.correct).length;
   const wrongCount = sessionLog.filter((e) => !e.correct).length;
   const accuracy =
@@ -762,39 +881,410 @@ export function PracticeTab({
       ? Math.round((correctCount / sessionLog.length) * 100)
       : 100;
 
-  return (
-    <div
-      className={`${
-        isFullscreen
-          ? "absolute inset-0 flex flex-col gap-3 overflow-hidden"
-          : "space-y-4"
-      }`}
-    >
-      {/* Canvas */}
-      <div
-        ref={containerRef}
-        className={`relative w-full overflow-hidden ${
-          isFullscreen
-            ? "flex-1 min-h-0 rounded-lg border border-pink-200/20"
-            : "rounded-2xl border border-pink-200/40"
-        }`}
-        style={isFullscreen ? undefined : { height: "min(60vh, 520px)" }}
-      >
-        <canvas ref={canvasRef} className="block w-full h-full" />
+  // ── Fullscreen settings menu items ─────────────────────────────────
+  const fsSettingsItems = useMemo((): SettingsMenuItem[] => {
+    if (!isFullscreen) return [];
+    const items: SettingsMenuItem[] = [];
 
+    // Playback Speed
+    if (setPlaybackSpeed && originalBpm) {
+      const activePreset = SPEED_PRESETS.find(
+        (p) => Math.abs(p - playbackSpeed) < 0.005,
+      );
+      items.push({
+        id: "speed",
+        label: "Playback Speed",
+        currentValue: activePreset
+          ? `${activePreset}×`
+          : `${Math.round(playbackSpeed * originalBpm)} BPM`,
+        panel: (
+          <div className="px-2 py-1 space-y-3">
+            <div className="flex flex-wrap gap-1.5 px-2">
+              {SPEED_PRESETS.map((preset) => (
+                <button
+                  key={preset}
+                  onClick={() => setPlaybackSpeed(preset)}
+                  className={`px-2.5 py-1.5 text-xs rounded-full transition-colors ${
+                    activePreset === preset
+                      ? "bg-pink-400 text-white"
+                      : "text-white/70 hover:bg-white/10 border border-white/20"
+                  }`}
+                >
+                  {preset}×
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-2 px-2">
+              <span className="text-xs text-white/50">BPM</span>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                defaultValue={Math.round(playbackSpeed * originalBpm)}
+                key={playbackSpeed}
+                onBlur={(e) => {
+                  const v = Number(e.target.value);
+                  if (Number.isFinite(v) && v > 0)
+                    setPlaybackSpeed(v / originalBpm);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                }}
+                className="w-16 border border-white/20 rounded-full px-2.5 py-1.5 text-center text-xs text-white bg-white/10 outline-none focus:border-pink-400 tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              />
+            </div>
+          </div>
+        ),
+      });
+    }
+
+    // Piano Sound
+    if (pianoOptions && pianoKey && setPianoKey) {
+      const currentLabel =
+        pianoOptions.find((o) => o.value === pianoKey)?.label ?? pianoKey;
+      items.push({
+        id: "piano",
+        label: "Piano Sound",
+        currentValue: currentLabel,
+        panel: (
+          <div>
+            {pianoOptions.map((opt) => (
+              <SettingsRadioItem
+                key={opt.value}
+                label={opt.label}
+                description={opt.description}
+                selected={pianoKey === opt.value}
+                onClick={() => setPianoKey(opt.value)}
+              />
+            ))}
+          </div>
+        ),
+      });
+    }
+
+    // Practice Mode
+    items.push({
+      id: "mode",
+      label: "Practice Mode",
+      currentValue:
+        practiceMode.charAt(0).toUpperCase() + practiceMode.slice(1),
+      panel: (
+        <div>
+          {(["flowing", "continuous", "discrete"] as const).map((mode) => (
+            <SettingsRadioItem
+              key={mode}
+              label={mode.charAt(0).toUpperCase() + mode.slice(1)}
+              description={
+                mode === "flowing"
+                  ? "Play along in real-time"
+                  : mode === "continuous"
+                    ? "Waits for each note, auto-advances"
+                    : "Step through one chord at a time"
+              }
+              selected={practiceMode === mode}
+              onClick={() => setPracticeMode(mode)}
+            />
+          ))}
+        </div>
+      ),
+    });
+
+    // MIDI Device
+    if (midiDevices.length > 0) {
+      const activeName =
+        midiDevices.find((d) => d.id === activeDevice)?.name ?? "None";
+      items.push({
+        id: "midi-device",
+        label: "MIDI Device",
+        currentValue: activeName,
+        panel: (
+          <div>
+            {midiDevices.map((d) => (
+              <SettingsRadioItem
+                key={d.id}
+                label={d.name ?? d.id}
+                selected={activeDevice === d.id}
+                onClick={() => setActiveDevice(d.id)}
+              />
+            ))}
+          </div>
+        ),
+      });
+    }
+
+    return items;
+  }, [
+    isFullscreen,
+    playbackSpeed,
+    setPlaybackSpeed,
+    originalBpm,
+    pianoOptions,
+    pianoKey,
+    setPianoKey,
+    practiceMode,
+    setPracticeMode,
+    midiDevices,
+    activeDevice,
+    setActiveDevice,
+  ]);
+
+  // ── Accuracy badge (shared between fullscreen and normal) ──────────
+  const accuracyBadge = (() => {
+    if (isFlowingMode && sessionLog.length > 0) {
+      return (
+        <span
+          className={`text-xs font-medium rounded-full px-2 py-0.5 border ${
+            flowingAccuracy >= 80
+              ? "text-green-400 bg-green-400/10 border-green-400/30"
+              : flowingAccuracy >= 50
+                ? "text-amber-400 bg-amber-400/10 border-amber-400/30"
+                : "text-red-400 bg-red-400/10 border-red-400/30"
+          }`}
+        >
+          {flowingAccuracy}%
+        </span>
+      );
+    }
+    if (!isFlowingMode && sessionLog.length > 0) {
+      return (
+        <span
+          className={`text-xs font-medium rounded-full px-2 py-0.5 border ${
+            accuracy >= 80
+              ? "text-green-400 bg-green-400/10 border-green-400/30"
+              : accuracy >= 50
+                ? "text-amber-400 bg-amber-400/10 border-amber-400/30"
+                : "text-red-400 bg-red-400/10 border-red-400/30"
+          }`}
+        >
+          {accuracy}% · {correctCount}✓ {wrongCount}✗
+        </span>
+      );
+    }
+    return null;
+  })();
+
+  // ── Fullscreen layout ───────────────────────────────────────────────
+  if (isFullscreen) {
+    const keepOverlayVisible =
+      status === "idle" ||
+      status === "paused" ||
+      status === "complete" ||
+      settingsOpen;
+
+    const canvasEl = (
+      <div ref={containerRef} className="w-full h-full relative">
+        <canvas ref={canvasRef} className="block w-full h-full" />
+        {/* Piano loading overlay */}
+        {pianoLoading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
+            <div className="flex items-center gap-2 text-white/80 text-sm">
+              <Loader2 className="w-5 h-5 animate-spin text-pink-400" />
+              <span>Loading piano…</span>
+            </div>
+          </div>
+        )}
         {/* Start overlay */}
-        {status === "idle" && (
+        {status === "idle" && !pianoLoading && (
           <button
             onClick={handleStart}
             disabled={midiDevices.length === 0}
             className={`absolute inset-0 flex items-center justify-center bg-black/20 transition-colors group ${
-              midiDevices.length === 0 ? "cursor-not-allowed" : "hover:bg-black/30"
+              midiDevices.length === 0
+                ? "cursor-not-allowed"
+                : "hover:bg-black/30"
             }`}
             aria-label="Start Practice"
           >
-            <div className={`w-16 h-16 rounded-full flex items-center justify-center shadow-xl transition-colors ${
-              midiDevices.length === 0 ? "bg-gray-400/90" : "bg-green-400/90 group-hover:bg-green-500"
-            }`}>
+            <div
+              className={`w-16 h-16 rounded-full flex items-center justify-center shadow-xl transition-colors ${
+                midiDevices.length === 0
+                  ? "bg-gray-400/90"
+                  : "bg-green-400/90 group-hover:bg-green-500"
+              }`}
+            >
+              <Play className="w-7 h-7 text-white ml-1" />
+            </div>
+            {midiDevices.length === 0 && (
+              <div className="absolute mt-24 text-white font-medium bg-black/50 px-4 py-2 rounded-full">
+                Please connect a MIDI device to start
+              </div>
+            )}
+          </button>
+        )}
+      </div>
+    );
+
+    return (
+      <div className="absolute inset-0">
+        <FullscreenOverlay
+          keepVisible={keepOverlayVisible}
+          canvasContent={canvasEl}
+        >
+          {/* Controls row */}
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* Start / Pause / Reset */}
+            {status === "idle" ? (
+              <button
+                onClick={handleStart}
+                disabled={midiDevices.length === 0}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-500 hover:bg-green-600 text-white text-xs font-medium transition disabled:opacity-40"
+              >
+                <Play className="w-3.5 h-3.5" />
+                Start
+              </button>
+            ) : (
+              <>
+                {(status === "flowing" || status === "paused") && (
+                  <button
+                    onClick={() => {
+                      togglePause();
+                      togglePlayback();
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500 hover:bg-amber-600 text-white text-xs font-medium transition"
+                  >
+                    {status === "paused" ? (
+                      <Play className="w-3.5 h-3.5" />
+                    ) : (
+                      <Pause className="w-3.5 h-3.5" />
+                    )}
+                    {status === "paused" ? "Resume" : "Pause"}
+                  </button>
+                )}
+                <button
+                  onClick={handleReset}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-white/20 text-white/80 hover:bg-white/10 text-xs font-medium transition"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  Reset
+                </button>
+              </>
+            )}
+
+            {/* Skip */}
+            {!isFlowingMode &&
+              showSkipButton &&
+              status !== "idle" &&
+              status !== "complete" && (
+                <button
+                  onClick={skipStep}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-400 hover:bg-amber-500 text-white text-xs font-medium transition"
+                >
+                  <SkipForward className="w-3.5 h-3.5" />
+                  Skip
+                </button>
+              )}
+
+            {/* Accuracy */}
+            {accuracyBadge}
+
+            {/* Progress (discrete/continuous) */}
+            {!isFlowingMode && status !== "idle" && (
+              <span className="text-xs text-white/50 tabular-nums">
+                {Math.min(currentStepIndex + 1, totalSteps)}/{totalSteps}
+              </span>
+            )}
+
+            {/* Time */}
+            <span className="text-xs text-white/60 tabular-nums">
+              {formatTime(practiceTime)} / {formatTime(duration)}
+            </span>
+
+            {/* AI Feedback */}
+            {sessionLog.length > 0 && (
+              <button
+                onClick={getFeedback}
+                disabled={feedbackLoading}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-pink-400 hover:bg-pink-500 text-white text-xs font-medium transition disabled:opacity-60"
+              >
+                {feedbackLoading ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="w-3.5 h-3.5" />
+                )}
+                AI Feedback
+              </button>
+            )}
+
+            {/* Spacer */}
+            <div className="flex-1" />
+
+            {/* No MIDI device warning */}
+            {midiDevices.length === 0 && (
+              <span className="text-xs text-red-400">No MIDI device</span>
+            )}
+
+            {/* Settings gear */}
+            {fsSettingsItems.length > 0 && (
+              <FullscreenSettingsMenu
+                items={fsSettingsItems}
+                onOpenChange={setSettingsOpen}
+              />
+            )}
+
+            {/* Exit fullscreen */}
+            {onExitFullscreen && (
+              <button
+                onClick={onExitFullscreen}
+                className="text-white/70 hover:text-white transition-colors"
+                aria-label="Exit fullscreen"
+                title="Exit fullscreen (Esc)"
+              >
+                <Minimize2 className="w-5 h-5" />
+              </button>
+            )}
+          </div>
+
+          {/* Error */}
+          {error && (
+            <div className="mt-2 p-2 rounded-lg bg-red-500/20 border border-red-400/30 text-red-300 text-xs text-center">
+              ⚠ {error}
+            </div>
+          )}
+        </FullscreenOverlay>
+      </div>
+    );
+  }
+
+  // ── Normal (non-fullscreen) layout ──────────────────────────────────
+  return (
+    <div className="space-y-4">
+      {/* Canvas */}
+      <div
+        ref={containerRef}
+        className="relative w-full overflow-hidden rounded-2xl border border-pink-200/40"
+        style={{ height: "min(60vh, 520px)" }}
+      >
+        <canvas ref={canvasRef} className="block w-full h-full" />
+
+        {/* Piano loading overlay */}
+        {pianoLoading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/30 z-10 rounded-2xl">
+            <div className="flex items-center gap-2 text-white/90 text-sm">
+              <Loader2 className="w-5 h-5 animate-spin text-pink-400" />
+              <span>Switching piano…</span>
+            </div>
+          </div>
+        )}
+
+        {/* Start overlay */}
+        {status === "idle" && !pianoLoading && (
+          <button
+            onClick={handleStart}
+            disabled={midiDevices.length === 0}
+            className={`absolute inset-0 flex items-center justify-center bg-black/20 transition-colors group ${
+              midiDevices.length === 0
+                ? "cursor-not-allowed"
+                : "hover:bg-black/30"
+            }`}
+            aria-label="Start Practice"
+          >
+            <div
+              className={`w-16 h-16 rounded-full flex items-center justify-center shadow-xl transition-colors ${
+                midiDevices.length === 0
+                  ? "bg-gray-400/90"
+                  : "bg-green-400/90 group-hover:bg-green-500"
+              }`}
+            >
               <Play className="w-7 h-7 text-white ml-1" />
             </div>
             {midiDevices.length === 0 && (
@@ -828,7 +1318,11 @@ export function PracticeTab({
                 }}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium transition"
               >
-                {status === "paused" ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
+                {status === "paused" ? (
+                  <Play className="w-4 h-4" />
+                ) : (
+                  <Pause className="w-4 h-4" />
+                )}
                 {status === "paused" ? "Resume" : "Pause"}
               </button>
             )}
@@ -860,15 +1354,18 @@ export function PracticeTab({
         )}
 
         {/* Skip step (escape hatch) — not shown in flowing mode */}
-        {!isFlowingMode && showSkipButton && status !== "idle" && status !== "complete" && (
-          <button
-            onClick={skipStep}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-400 hover:bg-amber-500 text-white text-xs font-medium transition animate-in fade-in duration-300"
-          >
-            <SkipForward className="w-3.5 h-3.5" />
-            Skip
-          </button>
-        )}
+        {!isFlowingMode &&
+          showSkipButton &&
+          status !== "idle" &&
+          status !== "complete" && (
+            <button
+              onClick={skipStep}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-400 hover:bg-amber-500 text-white text-xs font-medium transition animate-in fade-in duration-300"
+            >
+              <SkipForward className="w-3.5 h-3.5" />
+              Skip
+            </button>
+          )}
 
         {/* Mode toggle: Flowing / Continuous / Discrete */}
         <div className="flex rounded-full border border-pink-200 bg-white overflow-hidden text-xs font-medium">
@@ -923,7 +1420,8 @@ export function PracticeTab({
                   : "text-red-500 bg-red-50 border-red-200"
             }`}
           >
-            {flowingAccuracy}% · {ratingCounts.perfect}P {ratingCounts.great}G {ratingCounts.okay}O {ratingCounts.poor}B {flowingMissed}M
+            {flowingAccuracy}% · {ratingCounts.perfect}P {ratingCounts.great}G{" "}
+            {ratingCounts.okay}O {ratingCounts.poor}B {flowingMissed}M
           </span>
         )}
 
@@ -941,7 +1439,7 @@ export function PracticeTab({
           </span>
         )}
 
-        {/* AI Feedback button (added) */}
+        {/* AI Feedback button */}
         {sessionLog.length > 0 && (
           <button
             onClick={getFeedback}
@@ -963,6 +1461,18 @@ export function PracticeTab({
         </span>
 
         {pianoSwitcher && <div className="ml-1">{pianoSwitcher}</div>}
+
+        {/* Fullscreen button */}
+        {toggleFullscreen && (
+          <button
+            onClick={toggleFullscreen}
+            className="ml-1 flex items-center justify-center w-9 h-9 rounded-full bg-white border border-pink-200 text-pink-400 hover:bg-pink-50 transition-colors"
+            aria-label="Enter fullscreen"
+            title="Fullscreen"
+          >
+            <Maximize2 className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       {/* Error */}
@@ -972,7 +1482,7 @@ export function PracticeTab({
         </div>
       )}
 
-      {/* AI Feedback panel (added) */}
+      {/* AI Feedback panel */}
       {(feedbackText || feedbackError) && (
         <div className="rounded-2xl border border-pink-100 bg-pink-50/60 overflow-hidden">
           <button

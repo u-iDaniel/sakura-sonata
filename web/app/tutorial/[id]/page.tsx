@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useCallback, useEffect } from "react";
+import { Suspense, useState, useCallback, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -8,8 +8,6 @@ import {
   Loader2,
   Music,
   Piano,
-  Maximize2,
-  Minimize2,
   Volume2,
   Gamepad2,
 } from "lucide-react";
@@ -96,12 +94,61 @@ function TutorialContent() {
   const { formatTime, setPlaybackSpeed } = controls;
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [activeTab, setActiveTab] = useState("falling-notes");
+  const fullscreenRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!isPending && !session) {
       router.replace("/auth/login");
     }
   }, [isPending, session, router]);
+
+  // ── Browser Fullscreen API ──────────────────────────────────────────
+  const enterFullscreen = useCallback(() => {
+    const el = fullscreenRef.current;
+    if (!el) return;
+    const requestFS =
+      el.requestFullscreen ??
+      (el as any).webkitRequestFullscreen ??
+      (el as any).msRequestFullscreen;
+    if (requestFS) {
+      requestFS.call(el).catch(() => {
+        // Fallback: CSS-only fullscreen (e.g. iOS Safari)
+        setIsFullscreen(true);
+      });
+    } else {
+      // No API support — CSS fallback
+      setIsFullscreen(true);
+    }
+  }, []);
+
+  const exitFullscreen = useCallback(() => {
+    const exitFS =
+      document.exitFullscreen ??
+      (document as any).webkitExitFullscreen ??
+      (document as any).msExitFullscreen;
+    if (exitFS && document.fullscreenElement) {
+      exitFS.call(document).catch(() => setIsFullscreen(false));
+    } else {
+      setIsFullscreen(false);
+    }
+  }, []);
+
+  // Sync isFullscreen state with browser fullscreen events
+  useEffect(() => {
+    const onFSChange = () => {
+      const fsEl =
+        document.fullscreenElement ??
+        (document as any).webkitFullscreenElement ??
+        (document as any).msFullscreenElement;
+      setIsFullscreen(!!fsEl);
+    };
+    document.addEventListener("fullscreenchange", onFSChange);
+    document.addEventListener("webkitfullscreenchange", onFSChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", onFSChange);
+      document.removeEventListener("webkitfullscreenchange", onFSChange);
+    };
+  }, []);
 
   // Stop audio playback when switching to the Practice tab
   const handleTabChange = useCallback(
@@ -145,13 +192,20 @@ function TutorialContent() {
   );
 
   const toggleFullscreen = useCallback(() => {
-    setIsFullscreen((prev) => !prev);
-  }, []);
+    if (isFullscreen) {
+      exitFullscreen();
+    } else {
+      enterFullscreen();
+    }
+  }, [isFullscreen, enterFullscreen, exitFullscreen]);
 
   // Keyboard shortcuts
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isFullscreen) setIsFullscreen(false);
+      // Escape for CSS-only fallback (browser already handles it for real fullscreen)
+      if (e.key === "Escape" && isFullscreen && !document.fullscreenElement) {
+        setIsFullscreen(false);
+      }
       if (loadState !== "ready") return;
       // Disable playback shortcuts when on the Practice tab
       if (activeTab === "practice") return;
@@ -202,73 +256,87 @@ function TutorialContent() {
     );
   }
 
-  return (
-    <div
-      className={`w-full bg-[#FFF6EB] flex flex-col items-center overflow-hidden transition-all duration-300 ${
+  // Piano options without the factory (for the fullscreen settings menu)
+  const pianoOptionsForSettings = PIANO_OPTIONS.map(
+    ({ value, label, description }) => ({
+      value,
+      label,
+      description,
+      factory: PIANO_OPTIONS.find((o) => o.value === value)!.factory,
+    }),
+  );
+
+  // ── Fullscreen content (rendered in a portal-like ref container) ────
+  const fullscreenContent = isFullscreen ? (
+    activeTab === "practice" ? (
+      <PracticeTab
+        state={state}
+        controls={controls}
+        refs={refs}
         isFullscreen
-          ? "fixed inset-0 z-50 p-2 md:p-4"
-          : "relative min-h-screen p-6"
-      }`}
-    >
+        playbackSpeed={playbackSpeed}
+        onExitFullscreen={exitFullscreen}
+        setPlaybackSpeed={setPlaybackSpeed}
+        originalBpm={bpm}
+        pianoOptions={pianoOptionsForSettings}
+        pianoKey={pianoKey}
+        setPianoKey={setPianoKey}
+      />
+    ) : (
+      <FallingNotesTab
+        state={state}
+        controls={controls}
+        isFullscreen
+        playbackSpeed={playbackSpeed}
+        midiRef={refs.midiRef}
+        pianoFactory={pianoFactory}
+        onExitFullscreen={exitFullscreen}
+        setPlaybackSpeed={setPlaybackSpeed}
+        originalBpm={bpm}
+        pianoOptions={pianoOptionsForSettings}
+        pianoKey={pianoKey}
+        setPianoKey={setPianoKey}
+      />
+    )
+  ) : null;
+
+  return (
+    <div className="w-full bg-[#FFF6EB] flex flex-col items-center overflow-hidden relative min-h-screen p-6">
       <div className="absolute inset-0 z-0 pointer-events-none">
         <SakuraBackground />
       </div>
 
+      {/* Fullscreen container — this is what gets fullscreened via the API */}
+      <div
+        ref={fullscreenRef}
+        className={isFullscreen ? "fixed inset-0 z-50 bg-black" : "hidden"}
+        style={isFullscreen ? undefined : { display: "none" }}
+      >
+        {fullscreenContent}
+      </div>
+
       {/* Header */}
-      {!isFullscreen && (
-        <div className="z-10 w-full max-w-6xl">
-          <Link
-            href="/dashboard"
-            className="inline-flex items-center gap-2 mb-6 text-slate-400 hover:text-pink-400 transition-colors font-medium text-sm group"
-          >
-            <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-            Back to My Sonatas
-          </Link>
-        </div>
-      )}
+      <div className="z-10 w-full max-w-6xl">
+        <Link
+          href="/dashboard"
+          className="inline-flex items-center gap-2 mb-6 text-slate-400 hover:text-pink-400 transition-colors font-medium text-sm group"
+        >
+          <ChevronLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+          Back to My Sonatas
+        </Link>
+      </div>
 
       {/* Main Card */}
-      <div
-        className={`z-10 w-full bg-white/70 backdrop-blur-md border border-pink-100 transition-all duration-300 ${
-          isFullscreen
-            ? "max-w-full flex-1 min-h-0 rounded-2xl p-4 md:p-6 flex flex-col gap-4 overflow-hidden"
-            : "max-w-6xl rounded-3xl p-8 md:p-10 space-y-8"
-        }`}
-      >
+      <div className="z-10 w-full bg-white/70 backdrop-blur-md border border-pink-100 max-w-6xl rounded-3xl p-8 md:p-10 space-y-8">
         {/* Title & metadata */}
         <div className="text-center space-y-2 shrink-0">
-          <div className="flex items-center justify-center gap-3 min-w-0 max-w-full">
-            {isFullscreen && (
-              <Link
-                href="/dashboard"
-                className="text-slate-400 hover:text-pink-400 transition-colors"
-                title="Back to My Sonatas"
-              >
-                <ChevronLeft className="w-5 h-5" />
-              </Link>
-            )}
-            <h1
-              className={`font-serif text-[#2D3142] truncate max-w-full ${
-                isFullscreen ? "text-xl md:text-2xl" : "text-3xl md:text-4xl"
-              }`}
-              title={title || undefined}
-            >
-              {title || "Loading…"}
-            </h1>
-            <button
-              onClick={toggleFullscreen}
-              className="text-slate-400 hover:text-pink-400 transition-colors p-1 rounded-lg hover:bg-pink-50"
-              aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
-              title={isFullscreen ? "Exit fullscreen (Esc)" : "Fullscreen"}
-            >
-              {isFullscreen ? (
-                <Minimize2 className="w-5 h-5" />
-              ) : (
-                <Maximize2 className="w-5 h-5" />
-              )}
-            </button>
-          </div>
-          {loadState === "ready" && !isFullscreen && (
+          <h1
+            className="font-serif text-[#2D3142] truncate max-w-full text-3xl md:text-4xl"
+            title={title || undefined}
+          >
+            {title || "Loading…"}
+          </h1>
+          {loadState === "ready" && (
             <p className="text-sm text-slate-400">
               {trackCount} track{trackCount !== 1 && "s"} · {noteCount} notes ·{" "}
               {bpm} BPM · {timeSignature} · {keySignature} ·{" "}
@@ -291,9 +359,7 @@ function TutorialContent() {
             <Tabs
               defaultValue="falling-notes"
               onValueChange={handleTabChange}
-              className={`w-full ${
-                isFullscreen ? "flex-1 flex flex-col min-h-0" : ""
-              }`}
+              className="w-full"
             >
               <TabsList className="w-full justify-center bg-pink-50/80 border border-pink-100 rounded-xl p-1 shrink-0">
                 <TabsTrigger
@@ -319,22 +385,15 @@ function TutorialContent() {
                 </TabsTrigger>
               </TabsList>
 
-              <TabsContent
-                value="falling-notes"
-                className={`${
-                  isFullscreen
-                    ? "flex-1 min-h-0 relative overflow-hidden"
-                    : "mt-4"
-                }`}
-              >
+              <TabsContent value="falling-notes" className="mt-4">
                 <FallingNotesTab
                   state={state}
                   controls={controls}
-                  isFullscreen={isFullscreen}
                   pianoSwitcher={pianoSwitcherEl}
                   playbackSpeed={playbackSpeed}
                   midiRef={refs.midiRef}
                   pianoFactory={pianoFactory}
+                  toggleFullscreen={toggleFullscreen}
                 />
               </TabsContent>
 
@@ -346,21 +405,14 @@ function TutorialContent() {
                 />
               </TabsContent>
 
-              <TabsContent
-                value="practice"
-                className={`${
-                  isFullscreen
-                    ? "flex-1 min-h-0 relative overflow-hidden"
-                    : "mt-4"
-                }`}
-              >
+              <TabsContent value="practice" className="mt-4">
                 <PracticeTab
                   state={state}
                   controls={controls}
                   refs={refs}
-                  isFullscreen={isFullscreen}
                   pianoSwitcher={pianoSwitcherEl}
                   playbackSpeed={playbackSpeed}
+                  toggleFullscreen={toggleFullscreen}
                 />
               </TabsContent>
             </Tabs>
