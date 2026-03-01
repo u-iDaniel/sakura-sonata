@@ -1,3 +1,4 @@
+import { createClient } from "./bypass-client";
 import { MIDI_BUCKET } from "./constants";
 
 export function toStoragePath(fileUrlOrPath: string) {
@@ -6,4 +7,15 @@ export function toStoragePath(fileUrlOrPath: string) {
   let idx = fileUrlOrPath.indexOf(publicMarker);
   if (idx >= 0) return fileUrlOrPath.slice(idx + publicMarker.length);
   return "";
+}
+
+/**
+ * Converts a storage path to a public URL
+ * @param storagePath - The relative path in the storage bucket (e.g., "userId/uploads/hash.mid")
+ * @returns The full public URL to access the file
+ */
+export function toMidiBucketPublicUrl(storagePath: string): string {
+  const supabase = createClient();
+  const { data } = supabase.storage.from(MIDI_BUCKET).getPublicUrl(storagePath);
+  return data.publicUrl;
 }

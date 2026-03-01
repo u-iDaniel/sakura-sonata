@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/bypass-client";
 import { MIDI_BUCKET, SCORES_TABLE } from "@/lib/supabase/constants";
-import { toStoragePath } from "@/lib/supabase/utils";
+import { toStoragePath, toMidiBucketPublicUrl } from "@/lib/supabase/utils";
 import { headers } from "next/headers";
 
 export async function GET(request: Request) {
@@ -36,7 +36,13 @@ export async function GET(request: Request) {
     return Response.json({ error: "Could not fetch score" }, { status: 500 });
   }
 
-  return Response.json(data);
+  // Convert storage path to public URL for client
+  const responseData = {
+    ...data,
+    file_path: data.file_path ? toMidiBucketPublicUrl(data.file_path) : null,
+  };
+
+  return Response.json(responseData);
 }
 
 export async function POST(request: Request) {
@@ -55,14 +61,13 @@ export async function POST(request: Request) {
     return Response.json({ error: "file_path is required" }, { status: 400 });
   }
 
-  // Check that file_path belongs to our storage bucket
-  if (
-    !file_path.includes(process.env.S3_ENDPOINT || "") ||
-    !file_path.includes(MIDI_BUCKET)
-  ) {
+  // Normalize to storage path (accept both paths and URLs for backwards compatibility)
+  const storagePath = toStoragePath(file_path);
+
+  if (!storagePath) {
     console.error("Invalid file_path:", file_path);
     return Response.json(
-      { error: "file_path must be a valid URL" },
+      { error: "file_path must be a valid storage path" },
       { status: 400 },
     );
   }
@@ -71,7 +76,7 @@ export async function POST(request: Request) {
     .from(SCORES_TABLE)
     .insert({
       title,
-      file_path,
+      file_path: storagePath, // Store only the path
       user_id: session.user.id,
     })
     .select("id, title, file_path");
@@ -81,7 +86,17 @@ export async function POST(request: Request) {
     return Response.json({ error: "Failed to create score" }, { status: 500 });
   }
 
-  return Response.json(data?.[0] ?? null, { status: 201 });
+  // Convert storage path to public URL for response
+  const responseData = data?.[0]
+    ? {
+        ...data[0],
+        file_path: data[0].file_path
+          ? toMidiBucketPublicUrl(data[0].file_path)
+          : null,
+      }
+    : null;
+
+  return Response.json(responseData, { status: 201 });
 }
 
 export async function DELETE(request: Request) {
@@ -120,20 +135,11 @@ export async function DELETE(request: Request) {
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  // Delete the file from storage if it exists
   if (existingScore.file_path) {
-    const filePath = toStoragePath(existingScore.file_path);
-
-    if (!filePath) {
-      console.error(
-        "Could not extract storage path from file_path:",
-        existingScore.file_path,
-      );
-      return Response.json({ error: "Invalid file URL" }, { status: 400 });
-    }
-
     const { error: storageErr } = await supabase.storage
       .from(MIDI_BUCKET)
-      .remove([filePath]);
+      .remove([existingScore.file_path]);
 
     if (storageErr) {
       console.error("Error deleting file from storage:", storageErr);

@@ -22,6 +22,16 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  if (
+    session?.user &&
+    (request.nextUrl.pathname === "/auth/login" ||
+      request.nextUrl.pathname === "/auth/sign-up")
+  ) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/dashboard";
+    return NextResponse.redirect(url);
+  }
+
   return NextResponse.next({
     request,
   });

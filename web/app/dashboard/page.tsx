@@ -157,8 +157,8 @@ export default function DashboardPage() {
                   </button>
 
                   <div className="flex h-32 flex-col justify-between">
-                    <div className="pr-10">
-                      <h3 className="text-lg font-semibold text-sakura-text-pink">
+                    <div className="pr-10 min-w-0">
+                      <h3 className="text-lg font-semibold text-sakura-text-pink whitespace-nowrap overflow-hidden text-ellipsis">
                         {score.title?.trim() ? score.title : "Untitled"}
                       </h3>
                     </div>

@@ -111,6 +111,8 @@ export function useMidiPlayer(
 
         setTitle(data.title ?? "Untitled");
 
+        // TODO: Make backend fetch the MIDI file and return it directly for better security and performance
+        // Response will be the public url thanks to backend processing
         const res = await fetch(data.file_path);
         if (!res.ok) {
           setError("Failed to download MIDI file.");
@@ -253,7 +255,12 @@ export function useMidiPlayer(
       const part = new Tone.Part(
         (
           t,
-          note: { name: string; duration: number; velocity: number; originalDuration: number },
+          note: {
+            name: string;
+            duration: number;
+            velocity: number;
+            originalDuration: number;
+          },
         ) => {
           if (disposedRef.current) return;
           piano.start({
@@ -363,7 +370,12 @@ export function useMidiPlayer(
       const part = new Tone.Part(
         (
           time,
-          note: { name: string; duration: number; velocity: number; originalDuration: number },
+          note: {
+            name: string;
+            duration: number;
+            velocity: number;
+            originalDuration: number;
+          },
         ) => {
           if (disposedRef.current) return;
           piano.start({

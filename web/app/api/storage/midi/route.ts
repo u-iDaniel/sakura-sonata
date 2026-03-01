@@ -65,6 +65,7 @@ export async function POST(request: Request) {
     .upload(storagePath, new Blob([fileBuffer], { type: "audio/midi" }), {
       contentType: "audio/midi",
       upsert: false,
+      cacheControl: "3153600000", // 1 year in seconds since this file is immutable (hash-based name)
     });
 
   if (uploadError) {
@@ -75,21 +76,14 @@ export async function POST(request: Request) {
     );
   }
 
-  // Get the public URL for the uploaded file
-  const { data: urlData } = supabase.storage
-    .from(MIDI_BUCKET)
-    .getPublicUrl(uploadData.path);
-
-  const fileUrl = urlData.publicUrl;
-
-  // Insert a row in the scores table
+  // Insert a row in the scores table with just the storage path
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
   const scoreId = crypto.randomUUID();
   const { error: scoreError } = await supabase.from(SCORES_TABLE).insert({
     id: scoreId,
     user_id: userId,
     title: safeName,
-    file_path: fileUrl,
+    file_path: uploadData.path,
   });
 
   if (scoreError) {
@@ -100,5 +94,5 @@ export async function POST(request: Request) {
     );
   }
 
-  return Response.json({ scoreId, fileUrl }, { status: 201 });
+  return Response.json({ scoreId }, { status: 201 });
 }

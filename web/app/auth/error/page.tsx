@@ -1,4 +1,6 @@
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import Link from "next/link";
 import { Suspense } from "react";
 
 async function ErrorContent({
@@ -42,6 +44,11 @@ export default function Page({
               <Suspense>
                 <ErrorContent searchParams={searchParams} />
               </Suspense>
+              <Button asChild className="w-full">
+                <Link href="/auth/login" className="mt-4">
+                  Back to Login
+                </Link>
+              </Button>
             </CardContent>
           </Card>
         </div>
