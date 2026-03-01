@@ -114,7 +114,7 @@ export function SignUpForm({
                 <Input
                   id="password"
                   type="password"
-                  placeholder="Create a password (6+ characters)"
+                  placeholder="Create a password (8+ characters)"
                   className="rounded-xl bg-[#FFF9F9] border-pink-50 h-12"
                   required
                   value={password}
