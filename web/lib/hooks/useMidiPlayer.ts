@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { Midi } from "@tonejs/midi";
 import * as Tone from "tone";
 import type { PianoPlayer, PianoPlayerFactory } from "@/lib/piano";
@@ -56,8 +55,6 @@ export function useMidiPlayer(
   id: string | undefined,
   pianoFactory: PianoPlayerFactory = splendidPiano,
 ) {
-  const supabase = useMemo(() => createClient(), []);
-
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [error, setError] = useState("");
   const [title, setTitle] = useState("");
@@ -101,14 +98,13 @@ export function useMidiPlayer(
 
     async function load() {
       try {
-        const { data, error: dbErr } = await supabase
-          .from("scores")
-          .select("file_url, title")
-          .eq("id", id)
-          .single();
+        const scoreRes = await fetch(`/api/music/score?id=${id}`);
+        const data = await scoreRes.json();
 
-        if (dbErr || !data) {
-          setError("Score not found.");
+        if (!scoreRes.ok) {
+          data.error
+            ? setError("Failed to load score: " + data.error)
+            : setError("Failed to load score");
           setLoadState("error");
           return;
         }
@@ -255,7 +251,10 @@ export function useMidiPlayer(
       if (track.notes.length === 0) return;
 
       const part = new Tone.Part(
-        (t, note: { name: string; duration: number; velocity: number; originalDuration: number }) => {
+        (
+          t,
+          note: { name: string; duration: number; velocity: number; originalDuration: number },
+        ) => {
           if (disposedRef.current) return;
           piano.start({
             note: note.name,
@@ -264,9 +263,12 @@ export function useMidiPlayer(
             velocity: note.velocity,
           });
           setActiveNotes((prev) => [...new Set([...prev, note.name])]);
-          setTimeout(() => {
-            setActiveNotes((prev) => prev.filter((n) => n !== note.name));
-          }, note.originalDuration * 1000 / speed);
+          setTimeout(
+            () => {
+              setActiveNotes((prev) => prev.filter((n) => n !== note.name));
+            },
+            (note.originalDuration * 1000) / speed,
+          );
         },
         track.notes.map((n) => ({
           time: (n.time + LEAD_IN_SEC) / speed,
@@ -274,16 +276,19 @@ export function useMidiPlayer(
           duration: n.duration / speed,
           originalDuration: n.duration,
           velocity: n.velocity,
-        }))
+        })),
       );
 
       part.start(0);
       partsRef.current.push(part);
     });
 
-    transport.schedule(() => {
-      stopPlayback();
-    }, durationRef.current / speed + 1);
+    transport.schedule(
+      () => {
+        stopPlayback();
+      },
+      durationRef.current / speed + 1,
+    );
   }
 
   const seekTo = useCallback(
@@ -307,7 +312,7 @@ export function useMidiPlayer(
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [duration, stopPlayback]
+    [duration, stopPlayback],
   );
 
   const skip = useCallback(
@@ -316,7 +321,7 @@ export function useMidiPlayer(
       const virtualTime = transport.seconds * playbackSpeedRef.current;
       seekTo(virtualTime + seconds);
     },
-    [seekTo]
+    [seekTo],
   );
 
   const togglePlayback = useCallback(async () => {
@@ -356,7 +361,10 @@ export function useMidiPlayer(
       if (track.notes.length === 0) return;
 
       const part = new Tone.Part(
-        (time, note: { name: string; duration: number; velocity: number; originalDuration: number }) => {
+        (
+          time,
+          note: { name: string; duration: number; velocity: number; originalDuration: number },
+        ) => {
           if (disposedRef.current) return;
           piano.start({
             note: note.name,
@@ -365,9 +373,12 @@ export function useMidiPlayer(
             velocity: note.velocity,
           });
           setActiveNotes((prev) => [...new Set([...prev, note.name])]);
-          setTimeout(() => {
-            setActiveNotes((prev) => prev.filter((n) => n !== note.name));
-          }, note.originalDuration * 1000 / speed);
+          setTimeout(
+            () => {
+              setActiveNotes((prev) => prev.filter((n) => n !== note.name));
+            },
+            (note.originalDuration * 1000) / speed,
+          );
         },
         track.notes.map((n) => ({
           time: (n.time + LEAD_IN_SEC) / speed,
@@ -375,16 +386,19 @@ export function useMidiPlayer(
           duration: n.duration / speed,
           originalDuration: n.duration,
           velocity: n.velocity,
-        }))
+        })),
       );
 
       part.start(0);
       partsRef.current.push(part);
     });
 
-    transport.schedule(() => {
-      stopPlayback();
-    }, durationRef.current / speed + 1);
+    transport.schedule(
+      () => {
+        stopPlayback();
+      },
+      durationRef.current / speed + 1,
+    );
 
     transport.start();
     setIsPlaying(true);
