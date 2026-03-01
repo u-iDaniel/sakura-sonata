@@ -12,9 +12,10 @@ const features = [
   },
   {
     icon: Target,
-    title: "Practice Mode",
+    title: "Practice Mode*",
     description:
-      "Learn faster with step-by-step guidance. The app highlights the next notes and waits for you to play before moving on.",
+      "Learn faster with step-by-step guidance with ultimate interactivity. Up to 3 different practice modes to choose from: flowing, continuous, and discrete.",
+    footnote: "MIDI keyboards only for now",
   },
   {
     icon: Download,
@@ -52,18 +53,25 @@ export default function Home() {
             {features.map((feature) => (
               <div
                 key={feature.title}
-                className="rounded-2xl bg-white p-8 shadow-md transition-shadow hover:shadow-lg"
+                className="rounded-2xl bg-white p-8 shadow-md transition-shadow hover:shadow-lg flex flex-col"
               >
-                <feature.icon
-                  className="mb-4 h-10 w-10 text-sakura-pink"
-                  strokeWidth={1.5}
-                />
-                <h3 className="mb-2 text-lg font-semibold text-sakura-text-pink">
-                  {feature.title}
-                </h3>
-                <p className="text-sm leading-relaxed text-sakura-dark/70">
-                  {feature.description}
-                </p>
+                <div className="flex-1">
+                  <feature.icon
+                    className="mb-4 h-10 w-10 text-sakura-pink"
+                    strokeWidth={1.5}
+                  />
+                  <h3 className="mb-2 text-lg font-semibold text-sakura-text-pink">
+                    {feature.title}
+                  </h3>
+                  <p className="text-sm leading-relaxed text-sakura-dark/70">
+                    {feature.description}
+                  </p>
+                </div>
+                {feature.footnote && (
+                  <p className="mt-4 text-xs text-sakura-dark/50 border-t border-sakura-dark/10 pt-3">
+                    *{feature.footnote}
+                  </p>
+                )}
               </div>
             ))}
           </div>
