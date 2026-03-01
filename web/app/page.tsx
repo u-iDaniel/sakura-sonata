@@ -40,7 +40,7 @@ export default function Home() {
             Animated Playable Piano Tutorials in Seconds
           </h1>
           <Link
-            href="/auth/sign-up"
+            href="/auth/login"
             className="mt-10 inline-block rounded-full bg-sakura-pink px-10 py-4 text-lg font-semibold text-white shadow-lg shadow-sakura-pink/30 transition-all hover:shadow-xl hover:shadow-sakura-pink/40 hover:bg-sakura-pink/90"
           >
             Get Started
