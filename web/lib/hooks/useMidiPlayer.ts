@@ -111,7 +111,7 @@ export function useMidiPlayer(
 
         setTitle(data.title ?? "Untitled");
 
-        const res = await fetch(data.file_url);
+        const res = await fetch(data.file_path);
         if (!res.ok) {
           setError("Failed to download MIDI file.");
           setLoadState("error");

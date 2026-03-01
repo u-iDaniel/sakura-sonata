@@ -55,6 +55,18 @@ export async function POST(request: Request) {
     return Response.json({ error: "file_path is required" }, { status: 400 });
   }
 
+  // Check that file_path belongs to our storage bucket
+  if (
+    !file_path.includes(process.env.S3_ENDPOINT || "") ||
+    !file_path.includes(MIDI_BUCKET)
+  ) {
+    console.error("Invalid file_path:", file_path);
+    return Response.json(
+      { error: "file_path must be a valid URL" },
+      { status: 400 },
+    );
+  }
+
   const { data, error } = await supabase
     .from(SCORES_TABLE)
     .insert({
