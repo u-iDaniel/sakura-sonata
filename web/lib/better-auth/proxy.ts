@@ -1,0 +1,22 @@
+import { auth } from "@/lib/auth";
+import { NextResponse, type NextRequest } from "next/server";
+
+export async function updateSession(request: NextRequest) {
+  const session = await auth.api.getSession({
+    headers: request.headers,
+  });
+
+  if (
+    request.nextUrl.pathname !== "/" &&
+    !session?.user &&
+    !request.nextUrl.pathname.startsWith("/auth")
+  ) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/auth/login";
+    return NextResponse.redirect(url);
+  }
+
+  return NextResponse.next({
+    request,
+  });
+}

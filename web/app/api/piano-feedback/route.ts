@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
+import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -33,36 +35,41 @@ function describeSummary(s: PracticeSummary): string {
     // In flowing mode, attempts = total notes in the piece, hits = correctly matched notes
     lines.push(
       `This was a flowing (play-along) session. The piece contained ${s.totalSteps} notes. ` +
-      `The student matched ${s.hits} notes correctly, missed ${s.topMissed.reduce((a, n) => a + n.count, 0)} notes, ` +
-      `and hit ${s.topWrong.reduce((a, n) => a + n.count, 0)} wrong notes (${s.accuracyPct}% accuracy).`
+        `The student matched ${s.hits} notes correctly, missed ${s.topMissed.reduce((a, n) => a + n.count, 0)} notes, ` +
+        `and hit ${s.topWrong.reduce((a, n) => a + n.count, 0)} wrong notes (${s.accuracyPct}% accuracy).`,
     );
   } else {
     lines.push(
       `The student was evaluated on ${s.attempts} individual note steps: ` +
-      `${s.hits} correct, ${s.wrongs} incorrect (${s.accuracyPct}% accuracy).`
+        `${s.hits} correct, ${s.wrongs} incorrect (${s.accuracyPct}% accuracy).`,
     );
   }
 
   if (s.topWrong.length > 0) {
     lines.push(
       `Most frequently played wrong notes: ` +
-      s.topWrong.map((n) => `${n.note} (${n.count}×)`).join(", ") + ".",
+        s.topWrong.map((n) => `${n.note} (${n.count}×)`).join(", ") +
+        ".",
     );
   }
 
   if (s.topMissed.length > 0) {
     lines.push(
       `Most frequently missed (not played) notes: ` +
-      s.topMissed.map((n) => `${n.note} (${n.count}×)`).join(", ") + ".",
+        s.topMissed.map((n) => `${n.note} (${n.count}×)`).join(", ") +
+        ".",
     );
   }
 
   if (s.hotspots.length > 0) {
     lines.push(
       `Hardest spots in the piece (step number → fail count): ` +
-      s.hotspots.map((h) => `step ${h.step} (${h.fails} fails)`).join(", ") + ".",
+        s.hotspots.map((h) => `step ${h.step} (${h.fails} fails)`).join(", ") +
+        ".",
     );
-    lines.push(`(Note: Steps represent positions in the song — step 0 is the very beginning, and higher step numbers are further into the piece. If there are ${s.totalSteps} total steps, a hotspot at step ${Math.round(s.totalSteps / 2)} would be roughly halfway through.)`);
+    lines.push(
+      `(Note: Steps represent positions in the song — step 0 is the very beginning, and higher step numbers are further into the piece. If there are ${s.totalSteps} total steps, a hotspot at step ${Math.round(s.totalSteps / 2)} would be roughly halfway through.)`,
+    );
   }
 
   return lines.join("\n");
@@ -103,6 +110,14 @@ Requirements:
 // ── Handler ──────────────────────────────────────────────────────────
 
 export async function POST(req: Request) {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  });
+
+  if (!session || !session.user || !session.session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const body = await req.json();
 

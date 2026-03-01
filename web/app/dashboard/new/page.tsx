@@ -1,92 +1,68 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { SakuraBackground } from "@/components/SakuraBackground";
 import Link from "next/link";
-import { Upload } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
+import { Upload, Loader2 } from "lucide-react";
 import { ChevronLeft } from "lucide-react";
-
-const BUCKET = "sheet-music";
-const SCORES = "scores";
+import { authClient } from "@/lib/auth-client";
 
 export default function NewCompositionPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [status, setStatus] = useState<string>("");
-  const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
+  const { data: session, isPending } = authClient.useSession();
+
+  useEffect(() => {
+    if (!isPending && !session) {
+      router.replace("/auth/login");
+    }
+  }, [isPending, session, router]);
+
+  if (isPending || !session) {
+    return (
+      <div className="min-h-screen w-full bg-[#FFF6EB] flex items-center justify-center">
+        <Loader2 className="w-10 h-10 text-pink-400 animate-spin" />
+      </div>
+    );
+  }
 
   const uploadFile = async (file: File) => {
     try {
       setStatus("Uploading...");
 
-      // Only allow MIDI (adjust if you want mp3/wav too)
+      // Quick client-side checks before hitting the server
       const name = file.name.toLowerCase();
-      const isMidi =
-        file.type === "audio/midi" ||
-        name.endsWith(".mid") ||
-        name.endsWith(".midi");
+      const isMidi = file.type === "audio/midi" || name.endsWith(".mid") || name.endsWith(".midi");
       if (!isMidi) {
         setStatus("Please upload a MIDI file (.mid or .midi).");
         return;
       }
 
-      // size limit 50MB
-      const maxBytes = 50 * 1024 * 1024;
+      const maxBytes = 10 * 1024 * 1024;
       if (file.size > maxBytes) {
-        setStatus("File too large (max 50MB).");
+        setStatus("File too large (max 10MB).");
         return;
       }
 
-      const {
-        data: { user },
-        error: userErr,
-      } = await supabase.auth.getUser();
+      const formData = new FormData();
+      formData.append("file", file); // key is "file", value is the File object
 
-      if (userErr || !user) {
-        setStatus("You must be logged in to upload.");
-        return;
-      }
-
-      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-      const path = `${user.id}/uploads/${crypto.randomUUID()}-${safeName}`;
-
-      const { data, error } = await supabase.storage
-        .from(BUCKET)
-        .upload(path, file, {
-          contentType: "audio/midi",
-          upsert: false,
-        });
-
-      if (error) {
-        console.log("Upload error:", error);
-        setStatus(`Upload failed: ${error.message}`);
-        return;
-      }
-
-      const { data: signed } = await supabase.storage
-        .from(BUCKET)
-        .getPublicUrl(data.path);
-
-      const url = signed.publicUrl;
-
-      const scoreId = crypto.randomUUID();
-      const { error: scoreErr } = await supabase.from(SCORES).insert({
-        id: scoreId,
-        user_id: user.id,
-        title: safeName,
-        file_url: url,
+      const res = await fetch("/api/storage/midi", {
+        method: "POST",
+        body: formData,
       });
 
-      if (scoreErr) {
-        console.log("Score database upload error:", scoreErr);
-        setStatus("Score database upload error");
+      const body = await res.json();
+
+      if (!res.ok) {
+        setStatus(body.error ?? "Upload failed");
         return;
       }
 
       setStatus("");
-      router.push(`/tutorial/${scoreId}`);
+      router.push(`/tutorial/${body.scoreId}`);
     } catch (e: any) {
       setStatus(`Upload error: ${e?.message ?? "Unknown error"}`);
     }
@@ -145,10 +121,8 @@ export default function NewCompositionPage() {
           <div className="p-4 bg-pink-50 rounded-full text-pink-400 group-hover:scale-110 transition-transform">
             <Upload className="w-10 h-10" />
           </div>
-          <p className="text-[#2D3142] font-medium text-lg">
-            Drag & drop or click to upload
-          </p>
-          <span className="text-sm text-slate-400">MIDI • Max 50MB</span>
+          <p className="text-[#2D3142] font-medium text-lg">Drag & drop or click to upload</p>
+          <span className="text-sm text-slate-400">MIDI • Max 10MB</span>
         </div>
 
         {status && (
