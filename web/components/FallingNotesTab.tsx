@@ -374,56 +374,6 @@ export function FallingNotesTab({
       });
     }
 
-    // Export Video
-    if (midiRef) {
-      items.push({
-        id: "export",
-        label: "Export Video",
-        currentValue: isExporting ? `${exportProgress ?? 0}%` : undefined,
-        panel: (
-          <div className="px-4 py-2 space-y-3">
-            {isExporting ? (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm text-white/80">
-                  <Download className="w-4 h-4 animate-pulse text-pink-400" />
-                  <span>Exporting… {exportProgress ?? 0}%</span>
-                </div>
-                <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-pink-400 rounded-full transition-[width] duration-150"
-                    style={{ width: `${exportProgress ?? 0}%` }}
-                  />
-                </div>
-                <button
-                  onClick={cancelExport}
-                  className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300 transition-colors"
-                >
-                  <X className="w-3.5 h-3.5" />
-                  Cancel
-                </button>
-              </div>
-            ) : (
-              <>
-                <SettingsActionItem
-                  label="Export falling notes as video"
-                  icon={<Download className="w-4 h-4" />}
-                  onClick={handleExportVideo}
-                  description={
-                    isLargeFile
-                      ? "⚠ This piece is long — export may take several minutes."
-                      : undefined
-                  }
-                />
-                {exportError && (
-                  <p className="text-xs text-red-400 px-4">{exportError}</p>
-                )}
-              </>
-            )}
-          </div>
-        ),
-      });
-    }
-
     return items;
   }, [
     isFullscreen,
@@ -434,12 +384,6 @@ export function FallingNotesTab({
     pianoKey,
     setPianoKey,
     midiRef,
-    isExporting,
-    exportProgress,
-    cancelExport,
-    handleExportVideo,
-    isLargeFile,
-    exportError,
   ]);
 
   if (loadState !== "ready") return null;
