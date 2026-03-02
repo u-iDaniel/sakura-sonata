@@ -5,7 +5,11 @@ import type { Midi } from "@tonejs/midi";
 import * as Tone from "tone";
 import type { PianoPlayer } from "@/lib/piano";
 import type { NoteEvent } from "@/lib/hooks/useMidiPlayer";
-import type { PracticeLogEntry, FlowingJudgment, FlowingRating } from "@/lib/piano/midi-helpers";
+import type {
+  PracticeLogEntry,
+  FlowingJudgment,
+  FlowingRating,
+} from "@/lib/piano/midi-helpers";
 import {
   JUDGMENT_PERFECT_COLOR,
   JUDGMENT_GREAT_COLOR,
@@ -32,13 +36,13 @@ export interface PracticeStep {
 }
 
 export type PracticeStatus =
-  | "idle"          // waiting for user to click Start
-  | "playing"       // waiting for user to press the correct notes
-  | "sustaining"    // user holding correct notes, clock advancing in real-time (continuous only)
-  | "waiting"       // wrong note pressed or released, waiting for correct input
-  | "flowing"       // flowing mode: clock advancing in real-time automatically
-  | "paused"        // flowing mode: paused
-  | "complete";     // reached the end of the piece
+  | "idle" // waiting for user to click Start
+  | "playing" // waiting for user to press the correct notes
+  | "sustaining" // user holding correct notes, clock advancing in real-time (continuous only)
+  | "waiting" // wrong note pressed or released, waiting for correct input
+  | "flowing" // flowing mode: clock advancing in real-time automatically
+  | "paused" // flowing mode: paused
+  | "complete"; // reached the end of the piece
 
 export type PracticeMode = "discrete" | "continuous" | "flowing";
 
@@ -104,7 +108,9 @@ const FLOWING_MATCH_WINDOW_MS = 500;
 function buildSteps(allNotes: NoteEvent[]): PracticeStep[] {
   if (allNotes.length === 0) return [];
 
-  const sorted = [...allNotes].sort((a, b) => a.time - b.time || a.midi - b.midi);
+  const sorted = [...allNotes].sort(
+    (a, b) => a.time - b.time || a.midi - b.midi,
+  );
 
   const steps: PracticeStep[] = [];
   let currentGroup: NoteEvent[] = [sorted[0]];
@@ -119,7 +125,7 @@ function buildSteps(allNotes: NoteEvent[]): PracticeStep[] {
         index: steps.length,
         time: groupTime,
         midis: new Set(currentGroup.map((n) => n.midi)),
-        requiredMidis: new Set(),  // placeholder — filled in second pass
+        requiredMidis: new Set(), // placeholder — filled in second pass
         notes: currentGroup,
         maxDuration: Math.max(...currentGroup.map((n) => n.duration)),
       });
@@ -131,7 +137,7 @@ function buildSteps(allNotes: NoteEvent[]): PracticeStep[] {
     index: steps.length,
     time: groupTime,
     midis: new Set(currentGroup.map((n) => n.midi)),
-    requiredMidis: new Set(),  // placeholder — filled in second pass
+    requiredMidis: new Set(), // placeholder — filled in second pass
     notes: currentGroup,
     maxDuration: Math.max(...currentGroup.map((n) => n.duration)),
   });
@@ -166,21 +172,31 @@ function rateTimingOffset(absMs: number): FlowingRating {
 
 function ratingColor(rating: FlowingRating): string {
   switch (rating) {
-    case "perfect": return JUDGMENT_PERFECT_COLOR;
-    case "great": return JUDGMENT_GREAT_COLOR;
-    case "okay": return JUDGMENT_OKAY_COLOR;
-    case "poor": return JUDGMENT_POOR_COLOR;
-    case "miss": return JUDGMENT_POOR_COLOR;
+    case "perfect":
+      return JUDGMENT_PERFECT_COLOR;
+    case "great":
+      return JUDGMENT_GREAT_COLOR;
+    case "okay":
+      return JUDGMENT_OKAY_COLOR;
+    case "poor":
+      return JUDGMENT_POOR_COLOR;
+    case "miss":
+      return JUDGMENT_POOR_COLOR;
   }
 }
 
 function ratingText(rating: FlowingRating): string {
   switch (rating) {
-    case "perfect": return "Perfect";
-    case "great": return "Great";
-    case "okay": return "Okay";
-    case "poor": return "Poor";
-    case "miss": return "Miss";
+    case "perfect":
+      return "Perfect";
+    case "great":
+      return "Great";
+    case "okay":
+      return "Okay";
+    case "poor":
+      return "Poor";
+    case "miss":
+      return "Miss";
   }
 }
 
@@ -190,21 +206,30 @@ export function usePracticeMode(
   midiRef: React.RefObject<Midi | null>,
   pianoRef: React.RefObject<PianoPlayer | null>,
   getAllNotes: () => NoteEvent[],
-  layoutInfoRef?: React.RefObject<{ W: number; hitY: number; lo: number; hi: number; whiteCount: number } | null>,
+  layoutInfoRef?: React.RefObject<{
+    W: number;
+    hitY: number;
+    lo: number;
+    hi: number;
+    whiteCount: number;
+  } | null>,
   playbackSpeed: number = 1,
 ) {
   // Keep a ref so animation callbacks always get the latest value
   const playbackSpeedRef = useRef(playbackSpeed);
   playbackSpeedRef.current = playbackSpeed;
   // ── React state (for UI rendering) ─────────────────────────────
-  const [practiceMode, setPracticeModeState] = useState<PracticeMode>("flowing");
+  const [practiceMode, setPracticeModeState] =
+    useState<PracticeMode>("flowing");
   const [status, setStatus] = useState<PracticeStatus>("idle");
   const [practiceTime, setPracticeTime] = useState(0);
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [expectedMidis, setExpectedMidis] = useState<Set<number>>(new Set());
   const [satisfiedMidis, setSatisfiedMidis] = useState<Set<number>>(new Set());
   const [wrongNote, setWrongNote] = useState<number | null>(null);
-  const [midiDevices, setMidiDevices] = useState<{ id: string; name: string; ref: MIDIInput }[]>([]);
+  const [midiDevices, setMidiDevices] = useState<
+    { id: string; name: string; ref: MIDIInput }[]
+  >([]);
   const [activeDevice, setActiveDevice] = useState<string | null>(null);
   const [sessionLog, setSessionLog] = useState<PracticeLogEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -231,9 +256,9 @@ export function usePracticeMode(
 
   // Sustain animation refs
   const sustainAnimRef = useRef<number>(0);
-  const sustainBaseWallRef = useRef(0);     // performance.now() when sustain started/resumed
+  const sustainBaseWallRef = useRef(0); // performance.now() when sustain started/resumed
   const sustainBasePracticeRef = useRef(0); // practiceTime when sustain started/resumed
-  const audioPlayedRef = useRef(false);     // has audio been played for the current step?
+  const audioPlayedRef = useRef(false); // has audio been played for the current step?
   const skipTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Flowing mode refs ───────────────────────────────────────────
@@ -252,10 +277,44 @@ export function usePracticeMode(
   const flowingEndTimeRef = useRef(0);
 
   // Keep refs in sync
-  useEffect(() => { statusRef.current = status; }, [status]);
-  useEffect(() => { practiceModeRef.current = practiceMode; }, [practiceMode]);
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+  useEffect(() => {
+    practiceModeRef.current = practiceMode;
+  }, [practiceMode]);
 
   const setPracticeMode = useCallback((mode: PracticeMode) => {
+    if (mode === practiceModeRef.current) return;
+    // Reset entire piece when switching modes so the user starts fresh
+    cancelAnimationFrame(sustainAnimRef.current);
+    cancelAnimationFrame(flowingAnimRef.current);
+    stepsRef.current = [];
+    stepIndexRef.current = 0;
+    satisfiedRef.current = new Set();
+    sessionLogRef.current = [];
+    heldNotesRef.current = new Set();
+    rearticNeededRef.current = new Set();
+    audioPlayedRef.current = false;
+    flowingAllNotesRef.current = [];
+    flowingMatchedRef.current = new Set();
+    flowingMissedRef.current = new Set();
+    judgmentsRef.current = [];
+    setFlowingTotalNotes(0);
+    practiceTimeRef.current = 0;
+    setPracticeTime(0);
+    setCurrentStepIndex(0);
+    setExpectedMidis(new Set());
+    setSatisfiedMidis(new Set());
+    setWrongNote(null);
+    setSessionLog([]);
+    setError(null);
+    setHeldNotes(new Set());
+    setShowSkipButton(false);
+    resetSkipTimer();
+    setStatus("idle");
+    statusRef.current = "idle";
+
     setPracticeModeState(mode);
     practiceModeRef.current = mode;
   }, []);
@@ -275,7 +334,8 @@ export function usePracticeMode(
     }
 
     let access: MIDIAccess;
-    navigator.requestMIDIAccess()
+    navigator
+      .requestMIDIAccess()
       .then((a) => {
         access = a;
         refreshDevices(a);
@@ -357,7 +417,8 @@ export function usePracticeMode(
       if (statusRef.current !== "sustaining") return;
 
       const now = performance.now();
-      const elapsed = ((now - sustainBaseWallRef.current) * playbackSpeedRef.current) / 1000;
+      const elapsed =
+        ((now - sustainBaseWallRef.current) * playbackSpeedRef.current) / 1000;
       const newTime = sustainBasePracticeRef.current + elapsed;
 
       const currentSteps = stepsRef.current;
@@ -365,7 +426,10 @@ export function usePracticeMode(
       if (idx >= currentSteps.length) return;
 
       const step = currentSteps[idx];
-      const effectiveDuration = Math.max(MIN_EFFECTIVE_DURATION, step.maxDuration);
+      const effectiveDuration = Math.max(
+        MIN_EFFECTIVE_DURATION,
+        step.maxDuration,
+      );
       const nextIdx = idx + 1;
 
       // ── Next step check (priority — must fire before over-hold) ───
@@ -553,7 +617,8 @@ export function usePracticeMode(
       if (statusRef.current !== "flowing") return;
 
       const now = performance.now();
-      const elapsed = ((now - flowingStartWallRef.current) * playbackSpeedRef.current) / 1000;
+      const elapsed =
+        ((now - flowingStartWallRef.current) * playbackSpeedRef.current) / 1000;
       const newTime = flowingStartOffsetRef.current + elapsed;
 
       practiceTimeRef.current = newTime;
@@ -678,7 +743,7 @@ export function usePracticeMode(
         const blackKeyWidth = whiteKeyWidth * 0.6;
         let whiteIndex = 0;
         for (let m = lo; m < midi; m++) {
-          if (!(new Set([1, 3, 6, 8, 10])).has(m % 12)) whiteIndex++;
+          if (!new Set([1, 3, 6, 8, 10]).has(m % 12)) whiteIndex++;
         }
         const isBlack = new Set([1, 3, 6, 8, 10]).has(midi % 12);
         const centreX = isBlack
@@ -717,7 +782,9 @@ export function usePracticeMode(
     if (!activeDevice || !midiDevices.length) return;
 
     // Clear previous listeners
-    midiDevices.forEach((d) => { d.ref.onmidimessage = null; });
+    midiDevices.forEach((d) => {
+      d.ref.onmidimessage = null;
+    });
 
     const device = midiDevices.find((d) => d.id === activeDevice);
     if (!device) return;
@@ -750,13 +817,18 @@ export function usePracticeMode(
             let matchedNote: NoteEvent | undefined;
             for (let i = 0; i < allNotes.length; i++) {
               if (matched.has(i)) continue;
-              if (allNotes[i].midi === midi && Math.abs(allNotes[i].time - currentTime) < 0.5) {
+              if (
+                allNotes[i].midi === midi &&
+                Math.abs(allNotes[i].time - currentTime) < 0.5
+              ) {
                 matchedNote = allNotes[i];
                 break;
               }
             }
             piano.start({
-              note: matchedNote?.name || `${["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"][midi % 12]}${Math.floor(midi / 12) - 1}`,
+              note:
+                matchedNote?.name ||
+                `${["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"][midi % 12]}${Math.floor(midi / 12) - 1}`,
               duration: matchedNote?.duration || 0.5,
               velocity: velocity / 127,
             });
@@ -797,7 +869,10 @@ export function usePracticeMode(
         if (idx >= currentSteps.length) return;
 
         const step = currentSteps[idx];
-        const required = practiceModeRef.current === "continuous" ? step.requiredMidis : step.midis;
+        const required =
+          practiceModeRef.current === "continuous"
+            ? step.requiredMidis
+            : step.midis;
 
         // Log the key press
         const logEntry: PracticeLogEntry = {
@@ -865,7 +940,10 @@ export function usePracticeMode(
         if (idx >= currentSteps.length) return;
 
         const step = currentSteps[idx];
-        const required = practiceModeRef.current === "continuous" ? step.requiredMidis : step.midis;
+        const required =
+          practiceModeRef.current === "continuous"
+            ? step.requiredMidis
+            : step.midis;
 
         if (statusRef.current === "sustaining" && required.has(midi)) {
           // Required note released during sustain — pause clock
@@ -917,7 +995,7 @@ export function usePracticeMode(
   // ── Toggle Pause (Flowing Mode) ─────────────────────────────────
   const togglePause = useCallback(() => {
     if (practiceModeRef.current !== "flowing") return;
-    
+
     if (statusRef.current === "flowing") {
       cancelAnimationFrame(flowingAnimRef.current);
       setStatus("paused");

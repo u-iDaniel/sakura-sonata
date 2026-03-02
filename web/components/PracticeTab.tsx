@@ -20,7 +20,10 @@ import type {
   MidiPlayerRefs,
   NoteEvent,
 } from "@/lib/hooks/useMidiPlayer";
-import { usePracticeMode } from "@/lib/hooks/usePracticeMode";
+import type {
+  PracticeModeState,
+  PracticeModeControls,
+} from "@/lib/hooks/usePracticeMode";
 import type { FlowingJudgment } from "@/lib/piano/midi-helpers";
 import {
   isBlackKey,
@@ -79,6 +82,22 @@ interface PracticeTabProps {
   setPianoKey?: (key: string) => void;
   /** Toggle fullscreen mode (for normal mode button) */
   toggleFullscreen?: () => void;
+  /** Shared practice state (lifted from parent) */
+  practiceState: PracticeModeState;
+  /** Shared practice controls (lifted from parent) */
+  practiceControls: PracticeModeControls;
+  /** Shared practice time ref (lifted from parent) */
+  practiceTimeRef: React.RefObject<number>;
+  /** Shared judgments ref (lifted from parent) */
+  judgmentsRef: React.RefObject<FlowingJudgment[]>;
+  /** Shared layout info ref — canvas writes back layout dimensions for judgment positioning */
+  layoutInfoRef: React.RefObject<{
+    W: number;
+    hitY: number;
+    lo: number;
+    hi: number;
+    whiteCount: number;
+  } | null>;
 }
 
 // ── In-memory summary (no DB) ─────────────────────────────────────────
@@ -263,7 +282,6 @@ const SPEED_PRESETS = [0.1, 0.25, 0.5, 0.75, 1, 1.5, 2] as const;
 export function PracticeTab({
   state,
   controls,
-  refs,
   isFullscreen = false,
   pianoSwitcher,
   playbackSpeed = 1,
@@ -274,37 +292,17 @@ export function PracticeTab({
   pianoKey,
   setPianoKey,
   toggleFullscreen,
+  practiceState,
+  practiceControls,
+  practiceTimeRef,
+  judgmentsRef,
+  layoutInfoRef,
 }: PracticeTabProps) {
   const { loadState, duration, pianoLoading } = state;
   const { formatTime, getAllNotes, stopPlayback, togglePlayback, seekTo } =
     controls;
-  const { midiRef, pianoRef } = refs;
 
   const [settingsOpen, setSettingsOpen] = useState(false);
-
-  const layoutInfoRef = useRef<{
-    W: number;
-    hitY: number;
-    lo: number;
-    hi: number;
-    whiteCount: number;
-  } | null>(null);
-
-  const {
-    state: practiceState,
-    controls: practiceControls,
-    stepsRef,
-    practiceTimeRef,
-    judgmentsRef,
-    flowingAllNotesRef,
-    flowingMatchedRef,
-  } = usePracticeMode(
-    midiRef,
-    pianoRef,
-    getAllNotes,
-    layoutInfoRef,
-    playbackSpeed,
-  );
 
   const {
     status,
@@ -333,6 +331,15 @@ export function PracticeTab({
     setPracticeMode,
     togglePause,
   } = practiceControls;
+
+  // ── Wrap setPracticeMode to also stop audio playback ─────────────
+  const handleSetPracticeMode = useCallback(
+    (mode: typeof practiceMode) => {
+      setPracticeMode(mode);
+      stopPlayback();
+    },
+    [setPracticeMode, stopPlayback],
+  );
 
   // ── AI Feedback state (added; does not affect practice logic) ───────
   const [feedbackText, setFeedbackText] = useState<string | null>(null);
@@ -820,7 +827,13 @@ export function PracticeTab({
 
       ctx.fillStyle = "rgba(255,255,255,0.7)";
       ctx.font = "14px system-ui, sans-serif";
-      ctx.fillText("Get AI Feedback or Reset to try again", W / 2, H / 2 + 16);
+      ctx.fillText(
+        process.env.NEXT_PUBLIC_IS_AI_FEEDBACK_ENABLED === "true"
+          ? "Get AI Feedback or Reset to try again"
+          : "Reset to try again",
+        W / 2,
+        H / 2 + 16,
+      );
     }
 
     // ── Time overlay ──────────────────────────────────────────────
@@ -982,7 +995,7 @@ export function PracticeTab({
                     : "Step through one chord at a time"
               }
               selected={practiceMode === mode}
-              onClick={() => setPracticeMode(mode)}
+              onClick={() => handleSetPracticeMode(mode)}
             />
           ))}
         </div>
@@ -1189,22 +1202,6 @@ export function PracticeTab({
               {formatTime(practiceTime)} / {formatTime(duration)}
             </span>
 
-            {/* AI Feedback */}
-            {sessionLog.length > 0 && (
-              <button
-                onClick={getFeedback}
-                disabled={feedbackLoading}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-pink-400 hover:bg-pink-500 text-white text-xs font-medium transition disabled:opacity-60"
-              >
-                {feedbackLoading ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Sparkles className="w-3.5 h-3.5" />
-                )}
-                AI Feedback
-              </button>
-            )}
-
             {/* Spacer */}
             <div className="flex-1" />
 
@@ -1370,7 +1367,7 @@ export function PracticeTab({
         {/* Mode toggle: Flowing / Continuous / Discrete */}
         <div className="flex rounded-full border border-pink-200 bg-white overflow-hidden text-xs font-medium">
           <button
-            onClick={() => setPracticeMode("flowing")}
+            onClick={() => handleSetPracticeMode("flowing")}
             className={`px-3 py-1.5 transition ${
               practiceMode === "flowing"
                 ? "bg-pink-400 text-white"
@@ -1380,7 +1377,7 @@ export function PracticeTab({
             Flowing
           </button>
           <button
-            onClick={() => setPracticeMode("continuous")}
+            onClick={() => handleSetPracticeMode("continuous")}
             className={`px-3 py-1.5 transition ${
               practiceMode === "continuous"
                 ? "bg-pink-400 text-white"
@@ -1390,7 +1387,7 @@ export function PracticeTab({
             Continuous
           </button>
           <button
-            onClick={() => setPracticeMode("discrete")}
+            onClick={() => handleSetPracticeMode("discrete")}
             className={`px-3 py-1.5 transition ${
               practiceMode === "discrete"
                 ? "bg-pink-400 text-white"
@@ -1484,36 +1481,37 @@ export function PracticeTab({
       )}
 
       {/* AI Feedback panel */}
-      {(feedbackText || feedbackError) && (
-        <div className="rounded-2xl border border-pink-100 bg-pink-50/60 overflow-hidden">
-          <button
-            onClick={() => setShowFeedback((prev) => !prev)}
-            className="w-full flex items-center justify-between px-5 py-3 text-sm font-medium text-pink-600 hover:bg-pink-50 transition"
-          >
-            <span className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4" />
-              AI Feedback
-            </span>
-            {showFeedback ? (
-              <ChevronUp className="w-4 h-4" />
-            ) : (
-              <ChevronDown className="w-4 h-4" />
-            )}
-          </button>
-
-          {showFeedback && (
-            <div className="px-5 pb-4">
-              {feedbackError ? (
-                <p className="text-red-500 text-sm">⚠ {feedbackError}</p>
+      {process.env.NEXT_PUBLIC_IS_AI_FEEDBACK_ENABLED === "true" &&
+        (feedbackText || feedbackError) && (
+          <div className="rounded-2xl border border-pink-100 bg-pink-50/60 overflow-hidden">
+            <button
+              onClick={() => setShowFeedback((prev) => !prev)}
+              className="w-full flex items-center justify-between px-5 py-3 text-sm font-medium text-pink-600 hover:bg-pink-50 transition"
+            >
+              <span className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4" />
+                AI Feedback
+              </span>
+              {showFeedback ? (
+                <ChevronUp className="w-4 h-4" />
               ) : (
-                <div className="text-[#2D3142]/80 text-sm leading-relaxed prose prose-sm max-w-none">
-                  <ReactMarkdown>{feedbackText ?? ""}</ReactMarkdown>
-                </div>
+                <ChevronDown className="w-4 h-4" />
               )}
-            </div>
-          )}
-        </div>
-      )}
+            </button>
+
+            {showFeedback && (
+              <div className="px-5 pb-4">
+                {feedbackError ? (
+                  <p className="text-red-500 text-sm">⚠ {feedbackError}</p>
+                ) : (
+                  <div className="text-[#2D3142]/80 text-sm leading-relaxed prose prose-sm max-w-none">
+                    <ReactMarkdown>{feedbackText ?? ""}</ReactMarkdown>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
     </div>
   );
 }
