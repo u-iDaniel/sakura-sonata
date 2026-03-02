@@ -110,6 +110,11 @@ Requirements:
 // ── Handler ──────────────────────────────────────────────────────────
 
 export async function POST(req: Request) {
+  // Check if AI feedback feature is enabled
+  if (process.env.NEXT_PUBLIC_IS_AI_FEEDBACK_ENABLED !== "true") {
+    return NextResponse.json({ error: "Not Found" }, { status: 404 });
+  }
+
   const session = await auth.api.getSession({
     headers: await headers(),
   });
@@ -132,7 +137,10 @@ export async function POST(req: Request) {
       prompt = body.prompt;
     } else {
       return NextResponse.json(
-        { error: "Request must include either `summary` (object) or `prompt` (string)." },
+        {
+          error:
+            "Request must include either `summary` (object) or `prompt` (string).",
+        },
         { status: 400 },
       );
     }

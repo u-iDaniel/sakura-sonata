@@ -1440,20 +1440,21 @@ export function PracticeTab({
         )}
 
         {/* AI Feedback button */}
-        {sessionLog.length > 0 && (
-          <button
-            onClick={getFeedback}
-            disabled={feedbackLoading}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-pink-400 hover:bg-pink-500 text-white text-sm font-medium transition disabled:opacity-60"
-          >
-            {feedbackLoading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Sparkles className="w-4 h-4" />
-            )}
-            AI Feedback
-          </button>
-        )}
+        {sessionLog.length > 0 &&
+          process.env.NEXT_PUBLIC_IS_AI_FEEDBACK_ENABLED === "true" && (
+            <button
+              onClick={getFeedback}
+              disabled={feedbackLoading}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-pink-400 hover:bg-pink-500 text-white text-sm font-medium transition disabled:opacity-60"
+            >
+              {feedbackLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Sparkles className="w-4 h-4" />
+              )}
+              AI Feedback
+            </button>
+          )}
 
         {/* Time display */}
         <span className="text-xs text-slate-400 tabular-nums min-w-[4rem] text-right">

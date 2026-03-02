@@ -21,10 +21,18 @@ export default function NotFound() {
                 moved.
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex flex-col gap-3">
               <Button asChild className="w-full">
                 <Link href="/">Go Home</Link>
               </Button>
+              <Link
+                href="https://forms.gle/EJqinZh2knDvv4ck7"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex h-10 rounded-full bg-white/60 px-4 text-sakura-dark/70 hover:bg-white hover:text-sakura-text-pink transition-colors text-sm font-medium shadow hover:bg-primary/90 items-center justify-center text-center w-full"
+              >
+                Report Issue
+              </Link>
             </CardContent>
           </Card>
         </div>

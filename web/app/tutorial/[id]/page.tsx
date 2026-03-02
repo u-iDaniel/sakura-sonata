@@ -236,13 +236,23 @@ function TutorialContent() {
         <div className="z-10 bg-white/70 backdrop-blur-md rounded-3xl border border-pink-100 p-10 max-w-md text-center space-y-4">
           <h1 className="text-2xl font-serif text-[#2D3142]">Error</h1>
           <p className="text-slate-500">{error}</p>
-          <Link
-            href="/dashboard"
-            className="inline-flex items-center gap-2 text-pink-400 hover:text-pink-500 transition-colors font-medium text-sm"
-          >
-            <ChevronLeft className="w-4 h-4" />
-            Back to Dashboard
-          </Link>
+          <div className="flex flex-col gap-3 pt-2">
+            <Link
+              href="/dashboard"
+              className="inline-flex items-center justify-center gap-2 text-pink-400 hover:text-pink-500 transition-colors font-medium text-sm"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              Back to Dashboard
+            </Link>
+            <Link
+              href="https://forms.gle/EJqinZh2knDvv4ck7"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex h-10 rounded-full bg-white/60 px-4 text-sakura-dark/70 hover:bg-white hover:text-sakura-text-pink transition-colors text-sm font-medium shadow hover:bg-primary/90 items-center justify-center text-center"
+            >
+              Report Issue
+            </Link>
+          </div>
         </div>
       </div>
     );
