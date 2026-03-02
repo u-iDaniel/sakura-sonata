@@ -17,7 +17,7 @@ export const metadata: Metadata = {
     description: "Free animated beginner friendly piano tutorials in seconds!",
     images: [
       {
-        url: "/og-image.png",
+        url: "/opengraph-image.png",
         width: 1200,
         height: 600,
         alt: "Sakura Sonata - Piano visualization tutorial",
