@@ -143,7 +143,7 @@ export default function DashboardPage() {
               No compositions yet. Upload one to get started!
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
               {scores.map((score) => (
                 <div
                   key={score.id}
@@ -168,7 +168,10 @@ export default function DashboardPage() {
 
                   <div className="flex h-32 flex-col justify-between">
                     <div className="pr-10 min-w-0">
-                      <h3 className="text-lg font-semibold text-sakura-text-pink whitespace-nowrap overflow-hidden text-ellipsis">
+                      <h3
+                        className="text-lg font-semibold text-sakura-text-pink whitespace-nowrap overflow-hidden text-ellipsis"
+                        title={score.title || "Untitled"}
+                      >
                         {score.title?.trim() ? score.title : "Untitled"}
                       </h3>
                     </div>
