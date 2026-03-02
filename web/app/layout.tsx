@@ -6,7 +6,9 @@ import "./globals.css";
 
 const defaultUrl = process.env.VERCEL_URL
   ? `https://${process.env.VERCEL_URL}`
-  : "http://localhost:3000";
+  : process.env.BETTER_AUTH_URL
+    ? process.env.BETTER_AUTH_URL
+    : "http://localhost:3000";
 
 export const metadata: Metadata = {
   metadataBase: new URL(defaultUrl),
@@ -15,6 +17,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Sakura Sonata - A Piano Tutorial Generator",
     description: "Free animated beginner friendly piano tutorials in seconds!",
+    url: defaultUrl,
     images: [
       {
         url: "/opengraph-image.png",
