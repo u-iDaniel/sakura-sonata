@@ -1,7 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useCallback, useMemo, useState } from "react";
-import { Play, Pause, Square, RotateCcw, RotateCw, Download, X } from "lucide-react";
+import {
+  Play,
+  Pause,
+  Square,
+  RotateCcw,
+  RotateCw,
+  Download,
+  X,
+  Minimize2,
+  Loader2,
+  Maximize2,
+} from "lucide-react";
 import * as Tone from "tone";
 import type { Midi } from "@tonejs/midi";
 import type {
@@ -11,14 +22,25 @@ import type {
 } from "@/lib/hooks/useMidiPlayer";
 import type { PianoPlayerFactory } from "@/lib/piano";
 import { splendidPiano } from "@/lib/piano";
-import {
-  isBlackKey,
-  buildKeyLayout,
-} from "@/lib/piano/canvas-utils";
+import { isBlackKey, buildKeyLayout } from "@/lib/piano/canvas-utils";
 import { drawFallingNotesFrame } from "@/lib/piano/draw-frame";
 import { useVideoExport } from "@/lib/hooks/useVideoExport";
+import { FullscreenOverlay } from "@/components/FullscreenOverlay";
+import {
+  FullscreenSettingsMenu,
+  SettingsRadioItem,
+  SettingsActionItem,
+  type SettingsMenuItem,
+} from "@/components/FullscreenSettingsMenu";
 
 // ── Component ─────────────────────────────────────────────────────────
+
+export interface PianoOption {
+  value: string;
+  label: string;
+  description: string;
+  factory: PianoPlayerFactory;
+}
 
 interface FallingNotesTabProps {
   state: MidiPlayerState;
@@ -30,20 +52,65 @@ interface FallingNotesTabProps {
   midiRef?: React.RefObject<Midi | null>;
   /** Required for video export – factory to create piano for offline audio rendering */
   pianoFactory?: PianoPlayerFactory;
+  /** Fullscreen settings – exit callback */
+  onExitFullscreen?: () => void;
+  /** Fullscreen settings – playback speed setter */
+  setPlaybackSpeed?: (speed: number) => void;
+  /** Fullscreen settings – original BPM for speed ↔ BPM conversion */
+  originalBpm?: number;
+  /** Fullscreen settings – available piano samplers */
+  pianoOptions?: PianoOption[];
+  /** Fullscreen settings – currently selected piano key */
+  pianoKey?: string;
+  /** Fullscreen settings – piano key setter */
+  setPianoKey?: (key: string) => void;
+  /** Toggle fullscreen mode (for normal mode button) */
+  toggleFullscreen?: () => void;
 }
 
 const LARGE_FILE_THRESHOLD_SECS = 120; // 2 minutes
 
-export function FallingNotesTab({ state, controls, isFullscreen = false, pianoSwitcher, playbackSpeed = 1, midiRef, pianoFactory = splendidPiano }: FallingNotesTabProps) {
-  const { isPlaying, loadState, duration, progress } = state;
-  const { togglePlayback, stopPlayback, seekTo, skip, formatTime, getAllNotes } = controls;
+const SPEED_PRESETS = [0.1, 0.25, 0.5, 0.75, 1, 1.5, 2] as const;
+
+export function FallingNotesTab({
+  state,
+  controls,
+  isFullscreen = false,
+  pianoSwitcher,
+  playbackSpeed = 1,
+  midiRef,
+  pianoFactory = splendidPiano,
+  onExitFullscreen,
+  setPlaybackSpeed,
+  originalBpm,
+  pianoOptions,
+  pianoKey,
+  setPianoKey,
+  toggleFullscreen,
+}: FallingNotesTabProps) {
+  const { isPlaying, loadState, duration, progress, pianoLoading } = state;
+  const {
+    togglePlayback,
+    stopPlayback,
+    seekTo,
+    skip,
+    formatTime,
+    getAllNotes,
+  } = controls;
   const progressBarRef = useRef<HTMLDivElement | null>(null);
   const [isScrubbing, setIsScrubbing] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const isLargeFile = duration > LARGE_FILE_THRESHOLD_SECS;
 
   // Video export
-  const { exportVideo, exportProgress, isExporting, exportError, cancelExport } = useVideoExport();
+  const {
+    exportVideo,
+    exportProgress,
+    isExporting,
+    exportError,
+    cancelExport,
+  } = useVideoExport();
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -103,10 +170,13 @@ export function FallingNotesTab({ state, controls, isFullscreen = false, pianoSw
       const bar = progressBarRef.current;
       if (!bar || duration <= 0) return;
       const rect = bar.getBoundingClientRect();
-      const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      const ratio = Math.max(
+        0,
+        Math.min(1, (clientX - rect.left) / rect.width),
+      );
       seekTo(ratio * duration);
     },
-    [duration, seekTo]
+    [duration, seekTo],
   );
 
   const handleBarPointerDown = useCallback(
@@ -115,7 +185,7 @@ export function FallingNotesTab({ state, controls, isFullscreen = false, pianoSw
       (e.target as HTMLElement).setPointerCapture(e.pointerId);
       seekFromPointer(e.clientX);
     },
-    [seekFromPointer]
+    [seekFromPointer],
   );
 
   const handleBarPointerMove = useCallback(
@@ -123,7 +193,7 @@ export function FallingNotesTab({ state, controls, isFullscreen = false, pianoSw
       if (!isScrubbing) return;
       seekFromPointer(e.clientX);
     },
-    [isScrubbing, seekFromPointer]
+    [isScrubbing, seekFromPointer],
   );
 
   const handleBarPointerUp = useCallback(() => {
@@ -190,7 +260,20 @@ export function FallingNotesTab({ state, controls, isFullscreen = false, pianoSw
       title: state.title,
       bpm: state.bpm,
     });
-  }, [layout, bassTrack, duration, playbackSpeed, formatTime, midiRef, pianoFactory, isExporting, exportVideo, stopPlayback, state.title, state.bpm]);
+  }, [
+    layout,
+    bassTrack,
+    duration,
+    playbackSpeed,
+    formatTime,
+    midiRef,
+    pianoFactory,
+    isExporting,
+    exportVideo,
+    stopPlayback,
+    state.title,
+    state.bpm,
+  ]);
 
   useEffect(() => {
     let running = true;
@@ -208,29 +291,299 @@ export function FallingNotesTab({ state, controls, isFullscreen = false, pianoSw
     };
   }, [draw]);
 
+  // ── Fullscreen settings menu items ─────────────────────────────────
+  const fsSettingsItems = useMemo((): SettingsMenuItem[] => {
+    if (!isFullscreen) return [];
+    const items: SettingsMenuItem[] = [];
+
+    // Playback Speed
+    if (setPlaybackSpeed && originalBpm) {
+      const activePreset = SPEED_PRESETS.find(
+        (p) => Math.abs(p - playbackSpeed) < 0.005,
+      );
+      items.push({
+        id: "speed",
+        label: "Playback Speed",
+        currentValue: activePreset
+          ? `${activePreset}×`
+          : `${Math.round(playbackSpeed * originalBpm)} BPM`,
+        panel: (
+          <div className="px-2 py-1 space-y-3">
+            {/* Preset pills */}
+            <div className="flex flex-wrap gap-1.5 px-2">
+              {SPEED_PRESETS.map((preset) => (
+                <button
+                  key={preset}
+                  onClick={() => setPlaybackSpeed(preset)}
+                  className={`px-2.5 py-1.5 text-xs rounded-full transition-colors ${
+                    activePreset === preset
+                      ? "bg-pink-400 text-white"
+                      : "text-white/70 hover:bg-white/10 border border-white/20"
+                  }`}
+                >
+                  {preset}×
+                </button>
+              ))}
+            </div>
+            {/* BPM input */}
+            <div className="flex items-center gap-2 px-2">
+              <span className="text-xs text-white/50">BPM</span>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                defaultValue={Math.round(playbackSpeed * originalBpm)}
+                key={playbackSpeed}
+                onBlur={(e) => {
+                  const v = Number(e.target.value);
+                  if (Number.isFinite(v) && v > 0)
+                    setPlaybackSpeed(v / originalBpm);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                }}
+                className="w-16 border border-white/20 rounded-full px-2.5 py-1.5 text-center text-xs text-white bg-white/10 outline-none focus:border-pink-400 tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+              />
+            </div>
+          </div>
+        ),
+      });
+    }
+
+    // Piano Sound
+    if (pianoOptions && pianoKey && setPianoKey) {
+      const currentLabel =
+        pianoOptions.find((o) => o.value === pianoKey)?.label ?? pianoKey;
+      items.push({
+        id: "piano",
+        label: "Piano Sound",
+        currentValue: currentLabel,
+        panel: (
+          <div>
+            {pianoOptions.map((opt) => (
+              <SettingsRadioItem
+                key={opt.value}
+                label={opt.label}
+                description={opt.description}
+                selected={pianoKey === opt.value}
+                onClick={() => setPianoKey(opt.value)}
+              />
+            ))}
+          </div>
+        ),
+      });
+    }
+
+    // Export Video
+    if (midiRef) {
+      items.push({
+        id: "export",
+        label: "Export Video",
+        currentValue: isExporting ? `${exportProgress ?? 0}%` : undefined,
+        panel: (
+          <div className="px-4 py-2 space-y-3">
+            {isExporting ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-sm text-white/80">
+                  <Download className="w-4 h-4 animate-pulse text-pink-400" />
+                  <span>Exporting… {exportProgress ?? 0}%</span>
+                </div>
+                <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-pink-400 rounded-full transition-[width] duration-150"
+                    style={{ width: `${exportProgress ?? 0}%` }}
+                  />
+                </div>
+                <button
+                  onClick={cancelExport}
+                  className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300 transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <>
+                <SettingsActionItem
+                  label="Export falling notes as video"
+                  icon={<Download className="w-4 h-4" />}
+                  onClick={handleExportVideo}
+                  description={
+                    isLargeFile
+                      ? "⚠ This piece is long — export may take several minutes."
+                      : undefined
+                  }
+                />
+                {exportError && (
+                  <p className="text-xs text-red-400 px-4">{exportError}</p>
+                )}
+              </>
+            )}
+          </div>
+        ),
+      });
+    }
+
+    return items;
+  }, [
+    isFullscreen,
+    playbackSpeed,
+    setPlaybackSpeed,
+    originalBpm,
+    pianoOptions,
+    pianoKey,
+    setPianoKey,
+    midiRef,
+    isExporting,
+    exportProgress,
+    cancelExport,
+    handleExportVideo,
+    isLargeFile,
+    exportError,
+  ]);
+
   if (loadState !== "ready") return null;
 
+  // ── Fullscreen layout ───────────────────────────────────────────────
+  if (isFullscreen) {
+    const progressPct = duration > 0 ? (progress / duration) * 100 : 0;
+
+    const canvasEl = (
+      <div ref={containerRef} className="w-full h-full relative">
+        <canvas ref={canvasRef} className="block w-full h-full" />
+        {pianoLoading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-10">
+            <div className="flex items-center gap-2 text-white/80 text-sm">
+              <Loader2 className="w-5 h-5 animate-spin text-pink-400" />
+              <span>Loading piano…</span>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+
+    return (
+      <div className="absolute inset-0">
+        <FullscreenOverlay
+          keepVisible={!isPlaying || settingsOpen || isScrubbing}
+          canvasContent={canvasEl}
+          onBackdropClick={togglePlayback}
+        >
+          {/* Progress bar – full width above controls */}
+          <div
+            ref={progressBarRef}
+            className="w-full relative cursor-pointer group mb-3"
+            onPointerDown={handleBarPointerDown}
+            onPointerMove={handleBarPointerMove}
+            onPointerUp={handleBarPointerUp}
+            onPointerCancel={handleBarPointerUp}
+          >
+            <div className="w-full h-1 bg-white/20 rounded-full overflow-hidden group-hover:h-1.5 transition-all">
+              <div
+                className="h-full bg-pink-400 rounded-full transition-[width] duration-75"
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
+            <div
+              className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
+              style={{ left: `calc(${progressPct}% - 6px)` }}
+            />
+          </div>
+
+          {/* Controls row */}
+          <div className="flex items-center gap-3">
+            {/* Play / Pause */}
+            <button
+              onClick={togglePlayback}
+              className="flex items-center justify-center w-10 h-10 text-white hover:text-pink-300 transition-colors"
+              aria-label={isPlaying ? "Pause" : "Play"}
+            >
+              {isPlaying ? (
+                <Pause className="w-5 h-5" />
+              ) : (
+                <Play className="w-5 h-5 ml-0.5" />
+              )}
+            </button>
+
+            {/* Rewind / Forward / Stop */}
+            <button
+              onClick={() => skip(-5)}
+              className="text-white/70 hover:text-white transition-colors"
+              aria-label="Rewind 5 seconds"
+              title="Rewind 5s"
+            >
+              <RotateCcw className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => skip(5)}
+              className="text-white/70 hover:text-white transition-colors"
+              aria-label="Forward 5 seconds"
+              title="Forward 5s"
+            >
+              <RotateCw className="w-4 h-4" />
+            </button>
+            <button
+              onClick={stopPlayback}
+              className="text-white/70 hover:text-white transition-colors"
+              aria-label="Stop"
+            >
+              <Square className="w-4 h-4" />
+            </button>
+
+            {/* Time */}
+            <span className="text-xs text-white/60 tabular-nums ml-1">
+              {formatTime(progress)} / {formatTime(duration)}
+            </span>
+
+            {/* Spacer */}
+            <div className="flex-1" />
+
+            {/* Settings gear */}
+            {fsSettingsItems.length > 0 && (
+              <FullscreenSettingsMenu
+                items={fsSettingsItems}
+                onOpenChange={setSettingsOpen}
+              />
+            )}
+
+            {/* Exit fullscreen */}
+            {onExitFullscreen && (
+              <button
+                onClick={onExitFullscreen}
+                className="text-white/70 hover:text-white transition-colors"
+                aria-label="Exit fullscreen"
+                title="Exit fullscreen (Esc)"
+              >
+                <Minimize2 className="w-5 h-5" />
+              </button>
+            )}
+          </div>
+        </FullscreenOverlay>
+      </div>
+    );
+  }
+
+  // ── Normal (non-fullscreen) layout ──────────────────────────────────
   return (
-    <div
-      className={`${
-        isFullscreen
-          ? "absolute inset-0 flex flex-col gap-3 overflow-hidden"
-          : "space-y-4"
-      }`}
-    >
+    <div className="space-y-4">
       {/* Canvas container */}
       <div
         ref={containerRef}
-        className={`relative w-full overflow-hidden ${
-          isFullscreen
-            ? "flex-1 min-h-0 rounded-lg border border-pink-200/20"
-            : "rounded-2xl border border-pink-200/40"
-        }`}
-        style={isFullscreen ? undefined : { height: "min(60vh, 520px)" }}
+        className="relative w-full overflow-hidden rounded-2xl border border-pink-200/40"
+        style={{ height: "min(60vh, 520px)" }}
       >
         <canvas ref={canvasRef} className="block w-full h-full" />
 
-        {!isPlaying && progress === 0 && (
+        {pianoLoading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/30 z-10 rounded-2xl">
+            <div className="flex items-center gap-2 text-white/90 text-sm">
+              <Loader2 className="w-5 h-5 animate-spin text-pink-400" />
+              <span>Switching piano…</span>
+            </div>
+          </div>
+        )}
+
+        {!isPlaying && progress === 0 && !pianoLoading && (
           <button
             onClick={togglePlayback}
             className="absolute inset-0 flex items-center justify-center bg-black/20 hover:bg-black/30 transition-colors group"
@@ -292,12 +645,16 @@ export function FallingNotesTab({ state, controls, isFullscreen = false, pianoSw
           <div className="w-full h-2 bg-pink-100 rounded-full overflow-hidden group-hover:h-2.5 transition-all">
             <div
               className="h-full bg-gradient-to-r from-pink-300 to-pink-400 rounded-full transition-[width] duration-75"
-              style={{ width: `${duration > 0 ? (progress / duration) * 100 : 0}%` }}
+              style={{
+                width: `${duration > 0 ? (progress / duration) * 100 : 0}%`,
+              }}
             />
           </div>
           <div
             className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white border-2 border-pink-400 rounded-full shadow opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
-            style={{ left: `calc(${duration > 0 ? (progress / duration) * 100 : 0}% - 6px)` }}
+            style={{
+              left: `calc(${duration > 0 ? (progress / duration) * 100 : 0}% - 6px)`,
+            }}
           />
         </div>
         <span className="text-xs text-slate-400 tabular-nums min-w-[4rem] text-right">
@@ -328,7 +685,9 @@ export function FallingNotesTab({ state, controls, isFullscreen = false, pianoSw
                   onClick={handleExportVideo}
                   className="flex items-center gap-1.5 rounded-full bg-white border border-pink-200 text-pink-400 hover:bg-pink-50 hover:text-pink-600 transition-colors px-3 py-1.5 text-xs"
                   aria-label="Export video"
-                  title={isLargeFile ? undefined : "Export falling notes as video"}
+                  title={
+                    isLargeFile ? undefined : "Export falling notes as video"
+                  }
                 >
                   <Download className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Export Video</span>
@@ -343,12 +702,29 @@ export function FallingNotesTab({ state, controls, isFullscreen = false, pianoSw
               </div>
             )}
             {exportError && (
-              <span className="text-xs text-red-500 text-right" title={exportError}>Export failed</span>
+              <span
+                className="text-xs text-red-500 text-right"
+                title={exportError}
+              >
+                Export failed
+              </span>
             )}
           </div>
         )}
 
         {pianoSwitcher && <div className="ml-1">{pianoSwitcher}</div>}
+
+        {/* Fullscreen button */}
+        {toggleFullscreen && (
+          <button
+            onClick={toggleFullscreen}
+            className="ml-1 flex items-center justify-center w-9 h-9 rounded-full bg-white border border-pink-200 text-pink-400 hover:bg-pink-50 transition-colors"
+            aria-label="Enter fullscreen"
+            title="Fullscreen"
+          >
+            <Maximize2 className="w-4 h-4" />
+          </button>
+        )}
       </div>
     </div>
   );
