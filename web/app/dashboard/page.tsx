@@ -105,10 +105,20 @@ export default function DashboardPage() {
               Sakura Sonata
             </span>
           </Link>
-          <LogoutButton
-            label="Log out"
-            className="h-10 rounded-full bg-white/60 px-4 text-sakura-dark/70 hover:bg-white hover:text-sakura-text-pink"
-          />
+          <div className="flex items-center gap-3">
+            <Link
+              href="https://forms.gle/EJqinZh2knDvv4ck7"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex h-10 rounded-full bg-white/60 px-4 text-sakura-dark/70 hover:bg-white hover:text-sakura-text-pink transition-colors text-sm font-medium shadow hover:bg-primary/90 items-center text-center"
+            >
+              Feedback
+            </Link>
+            <LogoutButton
+              label="Log out"
+              className="h-10 rounded-full bg-white/60 px-4 text-sakura-dark/70 hover:bg-white hover:text-sakura-text-pink"
+            />
+          </div>
         </div>
 
         <main className="h-full p-10 pb-32 overflow-y-auto scrollbar-hide">
