@@ -11,7 +11,7 @@ const defaultUrl = process.env.VERCEL_URL
 export const metadata: Metadata = {
   metadataBase: new URL(defaultUrl),
   title: "Sakura Sonata",
-  description: "Sheet music to tutorials in minutes",
+  description: "Free animated beginner friendly piano tutorials in seconds!",
 };
 
 const inter = Inter({
