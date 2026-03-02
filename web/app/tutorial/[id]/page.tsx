@@ -76,7 +76,17 @@ function TutorialContent() {
   const id = params?.id;
   const router = useRouter();
   const { data: session, isPending } = authClient.useSession();
-  const [pianoKey, setPianoKey] = useState("splendid");
+  const [pianoKey, setPianoKeyState] = useState(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("pianoSound");
+      if (saved && PIANO_OPTIONS.some((o) => o.value === saved)) return saved;
+    }
+    return "splendid";
+  });
+  const setPianoKey = useCallback((key: string) => {
+    setPianoKeyState(key);
+    localStorage.setItem("pianoSound", key);
+  }, []);
   const pianoFactory = PIANO_OPTIONS.find((o) => o.value === pianoKey)!.factory;
   const { state, controls, refs } = useMidiPlayer(id, pianoFactory);
   const {
