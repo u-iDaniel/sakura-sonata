@@ -4,6 +4,7 @@ import { Suspense, useState, useCallback, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
+  ChevronDown,
   ChevronLeft,
   Loader2,
   Music,
@@ -404,10 +405,57 @@ function TutorialContent() {
         {/* Tabs */}
         {loadState === "ready" && (
           <>
+            {/* Mobile dropdown tab selector */}
+            <div className="flex justify-center md:hidden">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="flex items-center gap-2 rounded-xl bg-pink-50/80 border border-pink-100 px-4 py-2.5 text-sm font-medium text-pink-600 hover:bg-pink-100/80 transition-all shadow-sm">
+                    {activeTab === "falling-notes" && (
+                      <Piano className="w-4 h-4" />
+                    )}
+                    {activeTab === "audio-player" && (
+                      <Music className="w-4 h-4" />
+                    )}
+                    {activeTab === "practice" && (
+                      <Gamepad2 className="w-4 h-4" />
+                    )}
+                    <span>
+                      {activeTab === "falling-notes"
+                        ? "Falling Notes"
+                        : activeTab === "audio-player"
+                          ? "Audio Player"
+                          : "Practice"}
+                    </span>
+                    <ChevronDown className="w-4 h-4 ml-1 text-pink-400" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="center" className="w-52">
+                  <DropdownMenuRadioGroup
+                    value={activeTab}
+                    onValueChange={handleTabChange}
+                  >
+                    <DropdownMenuRadioItem value="falling-notes">
+                      <Piano className="w-4 h-4 mr-2" />
+                      Falling Notes
+                    </DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="audio-player">
+                      <Music className="w-4 h-4 mr-2" />
+                      Audio Player
+                    </DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="practice">
+                      <Gamepad2 className="w-4 h-4 mr-2" />
+                      Practice
+                    </DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+
+            {/* Desktop tab bar */}
             <Tabs
-              defaultValue="falling-notes"
+              value={activeTab}
               onValueChange={handleTabChange}
-              className="w-full"
+              className="w-full hidden md:block"
             >
               <TabsList className="w-full justify-center bg-pink-50/80 border border-pink-100 rounded-xl p-1 shrink-0">
                 <TabsTrigger
@@ -432,28 +480,37 @@ function TutorialContent() {
                   Practice
                 </TabsTrigger>
               </TabsList>
+            </Tabs>
 
-              <TabsContent value="falling-notes" className="mt-4">
+            {/* Tab content */}
+            {activeTab === "falling-notes" && (
+              <div className="mt-4">
                 <FallingNotesTab
                   state={state}
                   controls={controls}
                   pianoSwitcher={pianoSwitcherEl}
                   playbackSpeed={playbackSpeed}
+                  setPlaybackSpeed={setPlaybackSpeed}
+                  originalBpm={bpm}
                   midiRef={refs.midiRef}
                   pianoFactory={pianoFactory}
                   toggleFullscreen={toggleFullscreen}
                 />
-              </TabsContent>
+              </div>
+            )}
 
-              <TabsContent value="audio-player" className="mt-4">
+            {activeTab === "audio-player" && (
+              <div className="mt-4">
                 <AudioPlayerTab
                   state={state}
                   controls={controls}
                   pianoSwitcher={pianoSwitcherEl}
                 />
-              </TabsContent>
+              </div>
+            )}
 
-              <TabsContent value="practice" className="mt-4">
+            {activeTab === "practice" && (
+              <div className="mt-4">
                 <PracticeTab
                   state={state}
                   controls={controls}
@@ -467,8 +524,8 @@ function TutorialContent() {
                   judgmentsRef={judgmentsRef}
                   layoutInfoRef={practiceLayoutInfoRef}
                 />
-              </TabsContent>
-            </Tabs>
+              </div>
+            )}
 
             {/* Playback speed control */}
             <div className="mt-4">

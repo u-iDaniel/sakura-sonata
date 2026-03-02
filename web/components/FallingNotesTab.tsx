@@ -166,9 +166,8 @@ export function FallingNotesTab({
   }, [getAllNotes]);
 
   const seekFromPointer = useCallback(
-    (clientX: number) => {
-      const bar = progressBarRef.current;
-      if (!bar || duration <= 0) return;
+    (clientX: number, bar: HTMLElement) => {
+      if (duration <= 0) return;
       const rect = bar.getBoundingClientRect();
       const ratio = Math.max(
         0,
@@ -182,8 +181,8 @@ export function FallingNotesTab({
   const handleBarPointerDown = useCallback(
     (e: React.PointerEvent) => {
       setIsScrubbing(true);
-      (e.target as HTMLElement).setPointerCapture(e.pointerId);
-      seekFromPointer(e.clientX);
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      seekFromPointer(e.clientX, e.currentTarget as HTMLElement);
     },
     [seekFromPointer],
   );
@@ -191,7 +190,7 @@ export function FallingNotesTab({
   const handleBarPointerMove = useCallback(
     (e: React.PointerEvent) => {
       if (!isScrubbing) return;
-      seekFromPointer(e.clientX);
+      seekFromPointer(e.clientX, e.currentTarget as HTMLElement);
     },
     [isScrubbing, seekFromPointer],
   );
@@ -374,56 +373,6 @@ export function FallingNotesTab({
       });
     }
 
-    // Export Video
-    if (midiRef) {
-      items.push({
-        id: "export",
-        label: "Export Video",
-        currentValue: isExporting ? `${exportProgress ?? 0}%` : undefined,
-        panel: (
-          <div className="px-4 py-2 space-y-3">
-            {isExporting ? (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 text-sm text-white/80">
-                  <Download className="w-4 h-4 animate-pulse text-pink-400" />
-                  <span>Exporting… {exportProgress ?? 0}%</span>
-                </div>
-                <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-pink-400 rounded-full transition-[width] duration-150"
-                    style={{ width: `${exportProgress ?? 0}%` }}
-                  />
-                </div>
-                <button
-                  onClick={cancelExport}
-                  className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-300 transition-colors"
-                >
-                  <X className="w-3.5 h-3.5" />
-                  Cancel
-                </button>
-              </div>
-            ) : (
-              <>
-                <SettingsActionItem
-                  label="Export falling notes as video"
-                  icon={<Download className="w-4 h-4" />}
-                  onClick={handleExportVideo}
-                  description={
-                    isLargeFile
-                      ? "⚠ This piece is long — export may take several minutes."
-                      : undefined
-                  }
-                />
-                {exportError && (
-                  <p className="text-xs text-red-400 px-4">{exportError}</p>
-                )}
-              </>
-            )}
-          </div>
-        ),
-      });
-    }
-
     return items;
   }, [
     isFullscreen,
@@ -434,12 +383,6 @@ export function FallingNotesTab({
     pianoKey,
     setPianoKey,
     midiRef,
-    isExporting,
-    exportProgress,
-    cancelExport,
-    handleExportVideo,
-    isLargeFile,
-    exportError,
   ]);
 
   if (loadState !== "ready") return null;
@@ -597,134 +540,275 @@ export function FallingNotesTab({
       </div>
 
       {/* Controls */}
-      <div className="flex items-center justify-center gap-3 shrink-0 flex-wrap">
-        <button
-          onClick={() => skip(-5)}
-          className="flex items-center justify-center w-9 h-9 rounded-full bg-white border border-pink-200 text-pink-400 hover:bg-pink-50 transition-colors"
-          aria-label="Rewind 5 seconds"
-          title="Rewind 5s"
-        >
-          <RotateCcw className="w-3.5 h-3.5" />
-        </button>
-        <button
-          onClick={togglePlayback}
-          className="flex items-center justify-center w-12 h-12 rounded-full bg-pink-400 hover:bg-pink-500 text-white transition-colors shadow-lg hover:shadow-xl"
-          aria-label={isPlaying ? "Pause" : "Play"}
-        >
-          {isPlaying ? (
-            <Pause className="w-5 h-5" />
-          ) : (
-            <Play className="w-5 h-5 ml-0.5" />
-          )}
-        </button>
-        <button
-          onClick={() => skip(5)}
-          className="flex items-center justify-center w-9 h-9 rounded-full bg-white border border-pink-200 text-pink-400 hover:bg-pink-50 transition-colors"
-          aria-label="Forward 5 seconds"
-          title="Forward 5s"
-        >
-          <RotateCw className="w-3.5 h-3.5" />
-        </button>
-        <button
-          onClick={stopPlayback}
-          className="flex items-center justify-center w-9 h-9 rounded-full bg-white border border-pink-200 text-pink-400 hover:bg-pink-50 transition-colors"
-          aria-label="Stop"
-        >
-          <Square className="w-3.5 h-3.5" />
-        </button>
-
-        {/* Progress bar */}
-        <div
-          ref={progressBarRef}
-          className="flex-1 max-w-xs relative cursor-pointer group"
-          onPointerDown={handleBarPointerDown}
-          onPointerMove={handleBarPointerMove}
-          onPointerUp={handleBarPointerUp}
-          onPointerCancel={handleBarPointerUp}
-        >
-          <div className="w-full h-2 bg-pink-100 rounded-full overflow-hidden group-hover:h-2.5 transition-all">
+      <div className="space-y-3">
+        {/* ══ MOBILE LAYOUT (md:hidden) ══ */}
+        <div className="md:hidden space-y-3">
+          {/* Mobile Row 1: Time + Progress bar + Fullscreen */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-400 tabular-nums whitespace-nowrap">
+              {formatTime(progress)} / {formatTime(duration)}
+            </span>
             <div
-              className="h-full bg-gradient-to-r from-pink-300 to-pink-400 rounded-full transition-[width] duration-75"
-              style={{
-                width: `${duration > 0 ? (progress / duration) * 100 : 0}%`,
-              }}
-            />
-          </div>
-          <div
-            className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white border-2 border-pink-400 rounded-full shadow opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
-            style={{
-              left: `calc(${duration > 0 ? (progress / duration) * 100 : 0}% - 6px)`,
-            }}
-          />
-        </div>
-        <span className="text-xs text-slate-400 tabular-nums min-w-[4rem] text-right">
-          {formatTime(progress)} / {formatTime(duration)}
-        </span>
-
-        {/* Export Video button */}
-        {midiRef && (
-          <div className="flex flex-col items-end gap-1 ml-2">
-            {isExporting ? (
-              <div className="flex items-center gap-2">
-                <div className="flex items-center gap-1.5 rounded-full bg-pink-50 border border-pink-200 px-3 py-1.5 text-xs text-pink-600 min-w-[7rem]">
-                  <Download className="w-3.5 h-3.5 animate-pulse" />
-                  <span>Exporting {exportProgress ?? 0}%</span>
-                </div>
-                <button
-                  onClick={cancelExport}
-                  className="flex items-center justify-center w-7 h-7 rounded-full bg-white border border-pink-200 text-pink-400 hover:bg-pink-50 transition-colors"
-                  aria-label="Cancel export"
-                  title="Cancel export"
-                >
-                  <X className="w-3 h-3" />
-                </button>
+              ref={progressBarRef}
+              className="flex-1 min-w-[60px] relative cursor-pointer group"
+              onPointerDown={handleBarPointerDown}
+              onPointerMove={handleBarPointerMove}
+              onPointerUp={handleBarPointerUp}
+              onPointerCancel={handleBarPointerUp}
+            >
+              <div className="w-full h-2 bg-pink-100 rounded-full overflow-hidden group-hover:h-2.5 transition-all">
+                <div
+                  className="h-full bg-gradient-to-r from-pink-300 to-pink-400 rounded-full transition-[width] duration-75"
+                  style={{
+                    width: `${duration > 0 ? (progress / duration) * 100 : 0}%`,
+                  }}
+                />
               </div>
-            ) : (
-              <div className="relative group">
-                <button
-                  onClick={handleExportVideo}
-                  className="flex items-center gap-1.5 rounded-full bg-white border border-pink-200 text-pink-400 hover:bg-pink-50 hover:text-pink-600 transition-colors px-3 py-1.5 text-xs"
-                  aria-label="Export video"
-                  title={
-                    isLargeFile ? undefined : "Export falling notes as video"
-                  }
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Export Video</span>
-                </button>
-                {isLargeFile && (
-                  <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block z-50">
-                    <div className="rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-xs px-3 py-2 whitespace-nowrap shadow-md">
-                      ⚠ This piece is long — export may take several minutes.
+              <div
+                className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white border-2 border-pink-400 rounded-full shadow opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
+                style={{
+                  left: `calc(${duration > 0 ? (progress / duration) * 100 : 0}% - 6px)`,
+                }}
+              />
+            </div>
+            {toggleFullscreen && (
+              <button
+                onClick={toggleFullscreen}
+                className="flex items-center justify-center w-9 h-9 rounded-full bg-white border border-pink-200 text-pink-400 hover:bg-pink-50 transition-colors"
+                aria-label="Enter fullscreen"
+                title="Fullscreen"
+              >
+                <Maximize2 className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+
+          {/* Mobile Row 2: Transport controls */}
+          <div className="flex items-center justify-center gap-3">
+            <button
+              onClick={() => skip(-5)}
+              className="flex items-center justify-center w-9 h-9 rounded-full bg-white border border-pink-200 text-pink-400 hover:bg-pink-50 transition-colors"
+              aria-label="Rewind 5 seconds"
+              title="Rewind 5s"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={togglePlayback}
+              className="flex items-center justify-center w-12 h-12 rounded-full bg-pink-400 hover:bg-pink-500 text-white transition-colors shadow-lg hover:shadow-xl"
+              aria-label={isPlaying ? "Pause" : "Play"}
+            >
+              {isPlaying ? (
+                <Pause className="w-5 h-5" />
+              ) : (
+                <Play className="w-5 h-5 ml-0.5" />
+              )}
+            </button>
+            <button
+              onClick={() => skip(5)}
+              className="flex items-center justify-center w-9 h-9 rounded-full bg-white border border-pink-200 text-pink-400 hover:bg-pink-50 transition-colors"
+              aria-label="Forward 5 seconds"
+              title="Forward 5s"
+            >
+              <RotateCw className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={stopPlayback}
+              className="flex items-center justify-center w-9 h-9 rounded-full bg-white border border-pink-200 text-pink-400 hover:bg-pink-50 transition-colors"
+              aria-label="Stop"
+            >
+              <Square className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* Mobile Row 3: Export video + Piano switcher */}
+          <div className="flex items-center justify-center gap-3">
+            {midiRef && (
+              <div className="flex flex-col items-center gap-1">
+                {isExporting ? (
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 rounded-full bg-pink-50 border border-pink-200 px-3 py-1.5 text-xs text-pink-600 min-w-[7rem]">
+                      <Download className="w-3.5 h-3.5 animate-pulse" />
+                      <span>Exporting {exportProgress ?? 0}%</span>
                     </div>
+                    <button
+                      onClick={cancelExport}
+                      className="flex items-center justify-center w-7 h-7 rounded-full bg-white border border-pink-200 text-pink-400 hover:bg-pink-50 transition-colors"
+                      aria-label="Cancel export"
+                      title="Cancel export"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
                   </div>
+                ) : (
+                  <div className="relative group">
+                    <button
+                      onClick={handleExportVideo}
+                      className="flex items-center gap-1.5 rounded-full bg-white border border-pink-200 text-pink-400 hover:bg-pink-50 hover:text-pink-600 transition-colors px-3 py-1.5 text-xs"
+                      aria-label="Export video"
+                      title={
+                        isLargeFile
+                          ? undefined
+                          : "Export falling notes as video"
+                      }
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      Export Video
+                    </button>
+                    {isLargeFile && (
+                      <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block z-50">
+                        <div className="rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-xs px-3 py-2 whitespace-nowrap shadow-md">
+                          ⚠ This piece is long — export may take several
+                          minutes.
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {exportError && (
+                  <span
+                    className="text-xs text-red-500 text-center"
+                    title={exportError}
+                  >
+                    Export failed
+                  </span>
                 )}
               </div>
             )}
-            {exportError && (
-              <span
-                className="text-xs text-red-500 text-right"
-                title={exportError}
-              >
-                Export failed
-              </span>
-            )}
+            {pianoSwitcher && <div>{pianoSwitcher}</div>}
           </div>
-        )}
+        </div>
 
-        {pianoSwitcher && <div className="ml-1">{pianoSwitcher}</div>}
-
-        {/* Fullscreen button */}
-        {toggleFullscreen && (
+        {/* ══ DESKTOP LAYOUT (hidden md:flex) ══ */}
+        <div className="hidden md:flex items-center justify-center gap-3 shrink-0 flex-wrap">
           <button
-            onClick={toggleFullscreen}
-            className="ml-1 flex items-center justify-center w-9 h-9 rounded-full bg-white border border-pink-200 text-pink-400 hover:bg-pink-50 transition-colors"
-            aria-label="Enter fullscreen"
-            title="Fullscreen"
+            onClick={() => skip(-5)}
+            className="flex items-center justify-center w-9 h-9 rounded-full bg-white border border-pink-200 text-pink-400 hover:bg-pink-50 transition-colors"
+            aria-label="Rewind 5 seconds"
+            title="Rewind 5s"
           >
-            <Maximize2 className="w-4 h-4" />
+            <RotateCcw className="w-3.5 h-3.5" />
           </button>
-        )}
+          <button
+            onClick={togglePlayback}
+            className="flex items-center justify-center w-12 h-12 rounded-full bg-pink-400 hover:bg-pink-500 text-white transition-colors shadow-lg hover:shadow-xl"
+            aria-label={isPlaying ? "Pause" : "Play"}
+          >
+            {isPlaying ? (
+              <Pause className="w-5 h-5" />
+            ) : (
+              <Play className="w-5 h-5 ml-0.5" />
+            )}
+          </button>
+          <button
+            onClick={() => skip(5)}
+            className="flex items-center justify-center w-9 h-9 rounded-full bg-white border border-pink-200 text-pink-400 hover:bg-pink-50 transition-colors"
+            aria-label="Forward 5 seconds"
+            title="Forward 5s"
+          >
+            <RotateCw className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={stopPlayback}
+            className="flex items-center justify-center w-9 h-9 rounded-full bg-white border border-pink-200 text-pink-400 hover:bg-pink-50 transition-colors"
+            aria-label="Stop"
+          >
+            <Square className="w-3.5 h-3.5" />
+          </button>
+
+          {/* Progress bar */}
+          <div
+            ref={progressBarRef}
+            className="flex-1 max-w-xs relative cursor-pointer group"
+            onPointerDown={handleBarPointerDown}
+            onPointerMove={handleBarPointerMove}
+            onPointerUp={handleBarPointerUp}
+            onPointerCancel={handleBarPointerUp}
+          >
+            <div className="w-full h-2 bg-pink-100 rounded-full overflow-hidden group-hover:h-2.5 transition-all">
+              <div
+                className="h-full bg-gradient-to-r from-pink-300 to-pink-400 rounded-full transition-[width] duration-75"
+                style={{
+                  width: `${duration > 0 ? (progress / duration) * 100 : 0}%`,
+                }}
+              />
+            </div>
+            <div
+              className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white border-2 border-pink-400 rounded-full shadow opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"
+              style={{
+                left: `calc(${duration > 0 ? (progress / duration) * 100 : 0}% - 6px)`,
+              }}
+            />
+          </div>
+          <span className="text-xs text-slate-400 tabular-nums min-w-[4rem] text-right">
+            {formatTime(progress)} / {formatTime(duration)}
+          </span>
+
+          {/* Export Video button */}
+          {midiRef && (
+            <div className="flex flex-col items-end gap-1 ml-2">
+              {isExporting ? (
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 rounded-full bg-pink-50 border border-pink-200 px-3 py-1.5 text-xs text-pink-600 min-w-[7rem]">
+                    <Download className="w-3.5 h-3.5 animate-pulse" />
+                    <span>Exporting {exportProgress ?? 0}%</span>
+                  </div>
+                  <button
+                    onClick={cancelExport}
+                    className="flex items-center justify-center w-7 h-7 rounded-full bg-white border border-pink-200 text-pink-400 hover:bg-pink-50 transition-colors"
+                    aria-label="Cancel export"
+                    title="Cancel export"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ) : (
+                <div className="relative group">
+                  <button
+                    onClick={handleExportVideo}
+                    className="flex items-center gap-1.5 rounded-full bg-white border border-pink-200 text-pink-400 hover:bg-pink-50 hover:text-pink-600 transition-colors px-3 py-1.5 text-xs"
+                    aria-label="Export video"
+                    title={
+                      isLargeFile ? undefined : "Export falling notes as video"
+                    }
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Export Video</span>
+                  </button>
+                  {isLargeFile && (
+                    <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block z-50">
+                      <div className="rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-xs px-3 py-2 whitespace-nowrap shadow-md">
+                        ⚠ This piece is long — export may take several minutes.
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+              {exportError && (
+                <span
+                  className="text-xs text-red-500 text-right"
+                  title={exportError}
+                >
+                  Export failed
+                </span>
+              )}
+            </div>
+          )}
+
+          {pianoSwitcher && <div className="ml-1">{pianoSwitcher}</div>}
+
+          {/* Fullscreen button */}
+          {toggleFullscreen && (
+            <button
+              onClick={toggleFullscreen}
+              className="ml-1 flex items-center justify-center w-9 h-9 rounded-full bg-white border border-pink-200 text-pink-400 hover:bg-pink-50 transition-colors"
+              aria-label="Enter fullscreen"
+              title="Fullscreen"
+            >
+              <Maximize2 className="w-4 h-4" />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
