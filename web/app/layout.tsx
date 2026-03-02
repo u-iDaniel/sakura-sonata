@@ -12,6 +12,19 @@ export const metadata: Metadata = {
   metadataBase: new URL(defaultUrl),
   title: "Sakura Sonata",
   description: "Free animated beginner friendly piano tutorials in seconds!",
+  openGraph: {
+    title: "Sakura Sonata - A Piano Tutorial Generator",
+    description: "Free animated beginner friendly piano tutorials in seconds!",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 600,
+        alt: "Sakura Sonata - Piano visualization tutorial",
+      },
+    ],
+    type: "website",
+  },
 };
 
 const inter = Inter({
