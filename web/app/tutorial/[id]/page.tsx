@@ -27,6 +27,7 @@ import { FallingNotesTab } from "@/components/FallingNotesTab";
 import { PracticeTab } from "@/components/PracticeTab";
 import { PlaybackSpeedControl } from "@/components/PlaybackSpeedControl";
 import { useMidiPlayer } from "@/lib/hooks/useMidiPlayer";
+import { usePracticeMode } from "@/lib/hooks/usePracticeMode";
 import type { PianoPlayerFactory } from "@/lib/piano";
 import { splendidPiano, salamanderPiano, soundfontPiano } from "@/lib/piano";
 import { authClient } from "@/lib/auth-client";
@@ -105,6 +106,28 @@ function TutorialContent() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [activeTab, setActiveTab] = useState("falling-notes");
   const fullscreenRef = useRef<HTMLDivElement | null>(null);
+
+  // ── Shared practice-mode state (single instance for both normal & fullscreen) ──
+  const practiceLayoutInfoRef = useRef<{
+    W: number;
+    hitY: number;
+    lo: number;
+    hi: number;
+    whiteCount: number;
+  } | null>(null);
+
+  const {
+    state: practiceState,
+    controls: practiceControls,
+    practiceTimeRef,
+    judgmentsRef,
+  } = usePracticeMode(
+    refs.midiRef,
+    refs.pianoRef,
+    controls.getAllNotes,
+    practiceLayoutInfoRef,
+    playbackSpeed,
+  );
 
   useEffect(() => {
     if (!isPending && !session) {
@@ -301,6 +324,11 @@ function TutorialContent() {
         pianoOptions={pianoOptionsForSettings}
         pianoKey={pianoKey}
         setPianoKey={setPianoKey}
+        practiceState={practiceState}
+        practiceControls={practiceControls}
+        practiceTimeRef={practiceTimeRef}
+        judgmentsRef={judgmentsRef}
+        layoutInfoRef={practiceLayoutInfoRef}
       />
     ) : (
       <FallingNotesTab
@@ -433,6 +461,11 @@ function TutorialContent() {
                   pianoSwitcher={pianoSwitcherEl}
                   playbackSpeed={playbackSpeed}
                   toggleFullscreen={toggleFullscreen}
+                  practiceState={practiceState}
+                  practiceControls={practiceControls}
+                  practiceTimeRef={practiceTimeRef}
+                  judgmentsRef={judgmentsRef}
+                  layoutInfoRef={practiceLayoutInfoRef}
                 />
               </TabsContent>
             </Tabs>
