@@ -20,7 +20,7 @@ export const metadata: Metadata = {
     url: defaultUrl,
     images: [
       {
-        url: "/opengraph-image.png",
+        url: "https://i.postimg.cc/Fz5b5Hnq/opengraph-image.png",
         width: 1200,
         height: 600,
         alt: "Sakura Sonata - Piano visualization tutorial",
