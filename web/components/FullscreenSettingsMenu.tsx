@@ -32,20 +32,23 @@ export function FullscreenSettingsMenu({
   const [slideDir, setSlideDir] = useState<"left" | "right">("left");
   const menuRef = useRef<HTMLDivElement | null>(null);
 
+  // Notify parent *after* render, avoiding setState-during-render errors
+  useEffect(() => {
+    onOpenChange?.(open);
+  }, [open, onOpenChange]);
+
   const toggleOpen = useCallback(() => {
     setOpen((prev) => {
       const next = !prev;
       if (!next) setActivePanel(null);
-      onOpenChange?.(next);
       return next;
     });
-  }, [onOpenChange]);
+  }, []);
 
   const closeMenu = useCallback(() => {
     setOpen(false);
     setActivePanel(null);
-    onOpenChange?.(false);
-  }, [onOpenChange]);
+  }, []);
 
   const openPanel = useCallback((id: string) => {
     setSlideDir("left");
