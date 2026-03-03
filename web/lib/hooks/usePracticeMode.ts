@@ -5,6 +5,7 @@ import type { Midi } from "@tonejs/midi";
 import * as Tone from "tone";
 import type { PianoPlayer } from "@/lib/piano";
 import type { NoteEvent } from "@/lib/hooks/useMidiPlayer";
+import { ensureAudioContext } from "@/lib/piano/audio-context";
 import type {
   PracticeLogEntry,
   FlowingJudgment,
@@ -81,7 +82,7 @@ export interface PracticeModeState {
 }
 
 export interface PracticeModeControls {
-  start: () => void;
+  start: () => Promise<void>;
   reset: () => void;
   skipStep: () => void;
   setActiveDevice: (id: string) => void;
@@ -214,6 +215,7 @@ export function usePracticeMode(
     whiteCount: number;
   } | null>,
   playbackSpeed: number = 1,
+  ensurePianoReady?: () => Promise<PianoPlayer | null>,
 ) {
   // Keep a ref so animation callbacks always get the latest value
   const playbackSpeedRef = useRef(playbackSpeed);
@@ -275,6 +277,8 @@ export function usePracticeMode(
   const judgmentsRef = useRef<FlowingJudgment[]>([]);
   /** End time of the last note in the piece (for completion detection) */
   const flowingEndTimeRef = useRef(0);
+  /** Set of note indices whose reference audio has already been triggered */
+  const flowingPlayedRef = useRef<Set<number>>(new Set());
 
   // Keep refs in sync
   useEffect(() => {
@@ -283,6 +287,30 @@ export function usePracticeMode(
   useEffect(() => {
     practiceModeRef.current = practiceMode;
   }, [practiceMode]);
+
+  // ── Re-anchor clocks when playback speed changes mid-practice ───
+  // Without this, the elapsed-time formula (wallΔ × speed) would
+  // retroactively apply the new speed to all elapsed wall-time,
+  // causing the position to jump.
+  const prevSpeedRef = useRef(playbackSpeed);
+  useEffect(() => {
+    if (playbackSpeed === prevSpeedRef.current) return;
+    prevSpeedRef.current = playbackSpeed;
+
+    const st = statusRef.current;
+
+    // Re-anchor flowing clock
+    if (st === "flowing") {
+      flowingStartOffsetRef.current = practiceTimeRef.current;
+      flowingStartWallRef.current = performance.now();
+    }
+
+    // Re-anchor sustain clock
+    if (st === "sustaining") {
+      sustainBasePracticeRef.current = practiceTimeRef.current;
+      sustainBaseWallRef.current = performance.now();
+    }
+  }, [playbackSpeed]);
 
   const setPracticeMode = useCallback((mode: PracticeMode) => {
     if (mode === practiceModeRef.current) return;
@@ -299,6 +327,7 @@ export function usePracticeMode(
     flowingAllNotesRef.current = [];
     flowingMatchedRef.current = new Set();
     flowingMissedRef.current = new Set();
+    flowingPlayedRef.current = new Set();
     judgmentsRef.current = [];
     setFlowingTotalNotes(0);
     practiceTimeRef.current = 0;
@@ -366,7 +395,8 @@ export function usePracticeMode(
   function playStepAudioInline(step: PracticeStep) {
     const piano = pianoRef.current;
     if (!piano) return;
-    Tone.start();
+    // AudioContext is already unlocked from the start() user gesture —
+    // no need to call Tone.start() here.
     for (const note of step.notes) {
       piano.start({
         note: note.name,
@@ -623,6 +653,27 @@ export function usePracticeMode(
 
       practiceTimeRef.current = newTime;
 
+      // ── Play reference audio for notes the clock just passed ────
+      const piano = pianoRef.current;
+      const played = flowingPlayedRef.current;
+      if (piano) {
+        const allNotesAudio = flowingAllNotesRef.current;
+        for (let i = 0; i < allNotesAudio.length; i++) {
+          if (played.has(i)) continue;
+          const note = allNotesAudio[i];
+          if (note.time <= newTime) {
+            played.add(i);
+            piano.start({
+              note: note.name,
+              duration: note.duration,
+              velocity: note.velocity,
+            });
+          }
+          // Notes are sorted by time — stop once we reach future notes
+          if (note.time > newTime) break;
+        }
+      }
+
       // ── Detect missed notes ─────────────────────────────────────
       const allNotes = flowingAllNotesRef.current;
       const matched = flowingMatchedRef.current;
@@ -806,10 +857,9 @@ export function usePracticeMode(
           heldNotesRef.current = newHeld;
           setHeldNotes(new Set(newHeld));
 
-          // Play the note sound
+          // Play the note sound — AudioContext was unlocked when practice started
           const piano = pianoRef.current;
           if (piano) {
-            Tone.start();
             // Find matching note for duration/velocity or use defaults
             const allNotes = flowingAllNotesRef.current;
             const matched = flowingMatchedRef.current;
@@ -1011,11 +1061,19 @@ export function usePracticeMode(
   }, []);
 
   // ── Start practice ──────────────────────────────────────────────
-  const start = useCallback(() => {
+  const start = useCallback(async () => {
     const allNotes = getAllNotes();
     if (allNotes.length === 0) {
       setError("No notes in this score.");
       return;
+    }
+
+    // Unlock AudioContext and ensure piano samples are loaded.
+    // This runs inside a button click handler — a valid user gesture on iOS.
+    await ensureAudioContext();
+    if (ensurePianoReady) {
+      const piano = await ensurePianoReady();
+      if (!piano) return;
     }
 
     // Stop any Tone.Transport playback that may be running
@@ -1043,6 +1101,7 @@ export function usePracticeMode(
       flowingAllNotesRef.current = sorted;
       flowingMatchedRef.current = new Set();
       flowingMissedRef.current = new Set();
+      flowingPlayedRef.current = new Set();
       judgmentsRef.current = [];
       setFlowingTotalNotes(sorted.length);
 
@@ -1089,12 +1148,15 @@ export function usePracticeMode(
       statusRef.current = "playing";
       startSkipTimer();
     }
-  }, [getAllNotes]);
+  }, [getAllNotes, ensurePianoReady]);
 
   // ── Reset ───────────────────────────────────────────────────────
   const reset = useCallback(() => {
     cancelAnimationFrame(sustainAnimRef.current);
     cancelAnimationFrame(flowingAnimRef.current);
+
+    // Silence any currently ringing reference notes
+    pianoRef.current?.stop();
 
     stepsRef.current = [];
     stepIndexRef.current = 0;
@@ -1107,6 +1169,7 @@ export function usePracticeMode(
     flowingAllNotesRef.current = [];
     flowingMatchedRef.current = new Set();
     flowingMissedRef.current = new Set();
+    flowingPlayedRef.current = new Set();
     judgmentsRef.current = [];
     setFlowingTotalNotes(0);
 
@@ -1132,6 +1195,58 @@ export function usePracticeMode(
       cancelAnimationFrame(flowingAnimRef.current);
       if (skipTimerRef.current) clearTimeout(skipTimerRef.current);
     };
+  }, []);
+
+  // ── Handle browser tab visibility changes ───────────────────────
+  // When the user switches to another browser tab or application,
+  // requestAnimationFrame stops firing but wall-clock time keeps
+  // advancing. Without this handler, returning to the tab would
+  // cause all notes from the hidden interval to fire at once.
+  useEffect(() => {
+    function onVisibilityChange() {
+      if (document.hidden) {
+        // Tab became hidden — stop loops and silence notes
+        const st = statusRef.current;
+        if (st === "flowing") {
+          cancelAnimationFrame(flowingAnimRef.current);
+          pianoRef.current?.stop();
+        }
+        if (st === "sustaining") {
+          cancelAnimationFrame(sustainAnimRef.current);
+        }
+      } else {
+        // Tab became visible again — re-anchor clocks from current
+        // position so elapsed hidden time is skipped, then restart.
+        const st = statusRef.current;
+        if (st === "flowing") {
+          // Mark all notes up to current time as "played" so they
+          // don't all fire at once on the next tick.
+          const currentTime = practiceTimeRef.current;
+          const allNotes = flowingAllNotesRef.current;
+          const played = flowingPlayedRef.current;
+          for (let i = 0; i < allNotes.length; i++) {
+            if (played.has(i)) continue;
+            if (allNotes[i].time <= currentTime) {
+              played.add(i);
+            }
+            if (allNotes[i].time > currentTime) break;
+          }
+
+          flowingStartOffsetRef.current = currentTime;
+          flowingStartWallRef.current = performance.now();
+          startFlowingLoopRef.current();
+        }
+        if (st === "sustaining") {
+          sustainBasePracticeRef.current = practiceTimeRef.current;
+          sustainBaseWallRef.current = performance.now();
+          startSustainLoopRef.current();
+        }
+      }
+    }
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () =>
+      document.removeEventListener("visibilitychange", onVisibilityChange);
   }, []);
 
   return {

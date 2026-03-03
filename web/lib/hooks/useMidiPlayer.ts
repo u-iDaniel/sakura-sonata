@@ -5,6 +5,7 @@ import { Midi } from "@tonejs/midi";
 import * as Tone from "tone";
 import type { PianoPlayer, PianoPlayerFactory } from "@/lib/piano";
 import { splendidPiano } from "@/lib/piano";
+import { ensureAudioContext } from "@/lib/piano/audio-context";
 
 /** Seconds of silence prepended so the user can prepare before notes begin. */
 export const LEAD_IN_SEC = 1;
@@ -46,6 +47,9 @@ export interface MidiPlayerControls {
   formatTime: (seconds: number) => string;
   getAllNotes: () => NoteEvent[];
   setPlaybackSpeed: (speed: number) => void;
+  /** Ensure AudioContext is unlocked and piano samples are loaded (must be
+   *  called from a user-gesture handler on iOS Safari). */
+  ensurePianoReady: () => Promise<PianoPlayer | null>;
 }
 
 export interface MidiPlayerRefs {
@@ -77,6 +81,10 @@ export function useMidiPlayer(
   const disposedRef = useRef(false);
   const playbackSpeedRef = useRef(1);
   const durationRef = useRef(0);
+
+  // Keep a ref to the factory so ensurePianoReady always sees the latest value
+  const pianoFactoryRef = useRef(pianoFactory);
+  pianoFactoryRef.current = pianoFactory;
 
   const partsRef = useRef<Tone.Part[]>([]);
   const progressInterval = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -170,31 +178,87 @@ export function useMidiPlayer(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  // Create (or re-create) the piano player when the factory changes
+  // ── Ensure piano is loaded (called from user-gesture handlers) ──────
+  // On iOS Safari AudioContext must be created/resumed inside a user gesture.
+  // We defer piano sample loading to the first interaction (Play tap, practice
+  // Start, etc.) so the context is guaranteed to be active when samples decode.
+  const pianoLoadingPromiseRef = useRef<Promise<PianoPlayer | null> | null>(
+    null,
+  );
+
+  const ensurePianoReady =
+    useCallback(async (): Promise<PianoPlayer | null> => {
+      // Already loaded — fast path
+      if (pianoRef.current) return pianoRef.current;
+
+      // Another caller already kicked off loading — piggyback on that promise
+      if (pianoLoadingPromiseRef.current) return pianoLoadingPromiseRef.current;
+
+      const loadPromise = (async () => {
+        setPianoLoading(true);
+        try {
+          const audioContext = await ensureAudioContext();
+          const piano = pianoFactoryRef.current(audioContext);
+          await piano.loaded;
+
+          if (disposedRef.current) {
+            piano.dispose();
+            return null;
+          }
+
+          pianoRef.current = piano;
+          disposedRef.current = false;
+          return piano;
+        } catch {
+          setError("Failed to load piano samples.");
+          return null;
+        } finally {
+          setPianoLoading(false);
+          pianoLoadingPromiseRef.current = null;
+        }
+      })();
+
+      pianoLoadingPromiseRef.current = loadPromise;
+      return loadPromise;
+    }, []);
+
+  // Track which factory reference was last used so we can distinguish a
+  // genuine engine swap from React strict-mode re-running the same effect.
+  const prevFactoryRef = useRef<PianoPlayerFactory | null>(null);
+
+  // When MIDI data is ready, mark the UI as "ready" so the Play button
+  // appears. Piano samples are loaded lazily on first user interaction.
+  // When the piano *factory* changes (engine swap), the AudioContext is
+  // already active from earlier interaction, so reload eagerly.
   useEffect(() => {
     if (!midiLoaded) return;
 
+    // Detect whether the factory actually changed vs. a re-run with the same
+    // factory (initial mount, or React strict-mode double-invocation).
+    const factoryChanged =
+      prevFactoryRef.current !== null &&
+      prevFactoryRef.current !== pianoFactory;
+    prevFactoryRef.current = pianoFactory;
+
+    if (!factoryChanged) {
+      // Initial load (or strict-mode re-run) — just surface the UI.
+      // Piano will be loaded on first user gesture via ensurePianoReady().
+      if (loadState !== "ready") setLoadState("ready");
+      return;
+    }
+
+    // Factory genuinely changed — swap piano.
     let cancelled = false;
 
-    // Is this the initial piano load or a subsequent swap?
-    const isSwap = loadState === "ready";
-
-    async function initPiano() {
-      // Tear down any previous piano & playback
+    async function swapPiano() {
       stopPlayback();
       pianoRef.current?.dispose();
       pianoRef.current = null;
-
-      if (isSwap) {
-        // Keep loadState "ready" so canvases stay mounted; use pianoLoading instead
-        setPianoLoading(true);
-      } else {
-        setLoadState("loading");
-      }
+      setPianoLoading(true);
       setError("");
 
       try {
-        const audioContext = Tone.getContext().rawContext as AudioContext;
+        const audioContext = await ensureAudioContext();
         const piano = pianoFactory(audioContext);
         await piano.loaded;
 
@@ -205,25 +269,18 @@ export function useMidiPlayer(
 
         pianoRef.current = piano;
         disposedRef.current = false;
-
-        if (isSwap) {
-          setPianoLoading(false);
-        } else {
-          setLoadState("ready");
-        }
       } catch {
         if (!cancelled) {
           setError("Failed to load piano samples.");
-          if (isSwap) {
-            setPianoLoading(false);
-          } else {
-            setLoadState("error");
-          }
+        }
+      } finally {
+        if (!cancelled) {
+          setPianoLoading(false);
         }
       }
     }
 
-    initPiano();
+    swapPiano();
 
     return () => {
       cancelled = true;
@@ -365,11 +422,13 @@ export function useMidiPlayer(
       return;
     }
 
-    await Tone.start();
+    // Ensure AudioContext is unlocked and piano samples are loaded.
+    // This is called inside a click handler — a valid user gesture on iOS.
+    const piano = await ensurePianoReady();
+    if (!piano) return;
 
     const midi = midiRef.current;
-    const piano = pianoRef.current;
-    if (!midi || !piano) return;
+    if (!midi) return;
 
     if (transport.state === "paused") {
       transport.start();
@@ -437,7 +496,7 @@ export function useMidiPlayer(
     setIsPlaying(true);
     startProgressTracking();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPlaying, duration, stopPlayback]);
+  }, [isPlaying, duration, stopPlayback, ensurePianoReady]);
 
   const formatTime = useCallback((seconds: number) => {
     const m = Math.floor(seconds / 60);
@@ -519,6 +578,7 @@ export function useMidiPlayer(
       formatTime,
       getAllNotes,
       setPlaybackSpeed,
+      ensurePianoReady,
     },
     refs: {
       midiRef,

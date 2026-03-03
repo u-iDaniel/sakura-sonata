@@ -299,8 +299,7 @@ export function PracticeTab({
   layoutInfoRef,
 }: PracticeTabProps) {
   const { loadState, duration, pianoLoading } = state;
-  const { formatTime, getAllNotes, stopPlayback, togglePlayback, seekTo } =
-    controls;
+  const { formatTime, getAllNotes, stopPlayback } = controls;
 
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -453,19 +452,7 @@ export function PracticeTab({
   const handleStart = useCallback(async () => {
     if (midiDevices.length === 0) return;
     stopPlayback();
-    start();
-
-    // In flowing mode, start MIDI audio playback so the user can hear
-    // the reference piece while they play along.
-    if (practiceMode === "flowing") {
-      await togglePlayback();
-      const allNotes = getAllNotes();
-      if (allNotes.length > 0) {
-        const sorted = [...allNotes].sort((a, b) => a.time - b.time);
-        const startOffset = Math.max(0, sorted[0].time - 2);
-        seekTo(startOffset);
-      }
-    }
+    await start();
 
     // Feedback UI reset (does not affect practice logic)
     setFeedbackText(null);
@@ -474,10 +461,6 @@ export function PracticeTab({
   }, [
     stopPlayback,
     start,
-    practiceMode,
-    togglePlayback,
-    getAllNotes,
-    seekTo,
     midiDevices.length,
   ]);
 
@@ -1149,10 +1132,7 @@ export function PracticeTab({
               <>
                 {(status === "flowing" || status === "paused") && (
                   <button
-                    onClick={() => {
-                      togglePause();
-                      togglePlayback();
-                    }}
+                    onClick={togglePause}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500 hover:bg-amber-600 text-white text-xs font-medium transition"
                   >
                     {status === "paused" ? (
@@ -1258,7 +1238,7 @@ export function PracticeTab({
           <div className="absolute inset-0 flex items-center justify-center bg-black/30 z-10 rounded-2xl">
             <div className="flex items-center gap-2 text-white/90 text-sm">
               <Loader2 className="w-5 h-5 animate-spin text-pink-400" />
-              <span>Switching piano…</span>
+              <span>Loading piano…</span>
             </div>
           </div>
         )}
@@ -1309,10 +1289,7 @@ export function PracticeTab({
           <>
             {(status === "flowing" || status === "paused") && (
               <button
-                onClick={() => {
-                  togglePause();
-                  togglePlayback();
-                }}
+                onClick={togglePause}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium transition"
               >
                 {status === "paused" ? (
