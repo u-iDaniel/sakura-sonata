@@ -51,12 +51,14 @@ const PIANO_OPTIONS: {
   value: string;
   label: string;
   description: string;
+  warning?: string;
   factory: PianoPlayerFactory;
 }[] = [
   {
     value: "splendid",
     label: "Splendid Grand",
-    description: "Rich SoundFont piano",
+    description: "Rich SoundFont piano ",
+    warning: "(⚠ Uses the most resources)",
     factory: splendidPiano,
   },
   {
@@ -128,6 +130,7 @@ function TutorialContent() {
     controls.getAllNotes,
     practiceLayoutInfoRef,
     playbackSpeed,
+    controls.ensurePianoReady,
   );
 
   useEffect(() => {
@@ -184,15 +187,19 @@ function TutorialContent() {
     };
   }, []);
 
-  // Stop audio playback when switching to the Practice tab
+  // Stop audio playback when switching to the Practice tab;
+  // stop and reset practice mode when switching away from it.
   const handleTabChange = useCallback(
     (tab: string) => {
       setActiveTab(tab);
       if (tab === "practice" && state.isPlaying) {
         controls.stopPlayback();
       }
+      if (tab !== "practice") {
+        practiceControls.reset();
+      }
     },
-    [state.isPlaying, controls],
+    [state.isPlaying, controls, practiceControls],
   );
 
   const pianoSwitcherEl = (
@@ -217,6 +224,9 @@ function TutorialContent() {
               <div>
                 <div className="font-medium">{opt.label}</div>
                 <div className="text-xs text-slate-400">{opt.description}</div>
+                {opt?.warning && (
+                  <div className="text-xs text-red-500">{opt.warning}</div>
+                )}
               </div>
             </DropdownMenuRadioItem>
           ))}

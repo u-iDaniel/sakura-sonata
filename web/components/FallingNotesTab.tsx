@@ -521,7 +521,7 @@ export function FallingNotesTab({
           <div className="absolute inset-0 flex items-center justify-center bg-black/30 z-10 rounded-2xl">
             <div className="flex items-center gap-2 text-white/90 text-sm">
               <Loader2 className="w-5 h-5 animate-spin text-pink-400" />
-              <span>Switching piano…</span>
+              <span>Loading piano…</span>
             </div>
           </div>
         )}
