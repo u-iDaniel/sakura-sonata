@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/bypass-client";
 import { MIDI_BUCKET, SCORES_TABLE } from "@/lib/supabase/constants";
-import { toStoragePath, toMidiBucketPublicUrl } from "@/lib/supabase/utils";
+import { toStoragePath } from "@/lib/supabase/utils";
 import { headers } from "next/headers";
 
 export async function GET(request: Request) {
@@ -26,7 +26,7 @@ export async function GET(request: Request) {
 
   const { data, error } = await supabase
     .from(SCORES_TABLE)
-    .select("id, title, file_path")
+    .select("id, title")
     .eq("id", id)
     .eq("user_id", session.user.id)
     .single();
@@ -36,13 +36,7 @@ export async function GET(request: Request) {
     return Response.json({ error: "Could not fetch score" }, { status: 500 });
   }
 
-  // Convert storage path to public URL for client
-  const responseData = {
-    ...data,
-    file_path: data.file_path ? toMidiBucketPublicUrl(data.file_path) : null,
-  };
-
-  return Response.json(responseData);
+  return Response.json(data);
 }
 
 export async function POST(request: Request) {
@@ -79,24 +73,14 @@ export async function POST(request: Request) {
       file_path: storagePath, // Store only the path
       user_id: session.user.id,
     })
-    .select("id, title, file_path");
+    .select("id, title");
 
   if (error) {
     console.error("Error creating score:", error);
     return Response.json({ error: "Failed to create score" }, { status: 500 });
   }
 
-  // Convert storage path to public URL for response
-  const responseData = data?.[0]
-    ? {
-        ...data[0],
-        file_path: data[0].file_path
-          ? toMidiBucketPublicUrl(data[0].file_path)
-          : null,
-      }
-    : null;
-
-  return Response.json(responseData, { status: 201 });
+  return Response.json(data, { status: 201 });
 }
 
 export async function DELETE(request: Request) {
@@ -161,5 +145,5 @@ export async function DELETE(request: Request) {
     return Response.json({ error: "Failed to delete score" }, { status: 500 });
   }
 
-  return Response.json({ message: "Score deleted successfully" });
+  return new Response(null, { status: 204 });
 }
