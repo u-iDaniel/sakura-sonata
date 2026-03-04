@@ -39,50 +39,6 @@ export async function GET(request: Request) {
   return Response.json(data);
 }
 
-export async function POST(request: Request) {
-  const supabase = createClient();
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  });
-
-  if (!session || !session.user || !session.session) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const { title, file_path } = await request.json();
-
-  if (!file_path) {
-    return Response.json({ error: "file_path is required" }, { status: 400 });
-  }
-
-  // Normalize to storage path (accept both paths and URLs for backwards compatibility)
-  const storagePath = toStoragePath(file_path);
-
-  if (!storagePath) {
-    console.error("Invalid file_path:", file_path);
-    return Response.json(
-      { error: "file_path must be a valid storage path" },
-      { status: 400 },
-    );
-  }
-
-  const { data, error } = await supabase
-    .from(SCORES_TABLE)
-    .insert({
-      title,
-      file_path: storagePath, // Store only the path
-      user_id: session.user.id,
-    })
-    .select("id, title");
-
-  if (error) {
-    console.error("Error creating score:", error);
-    return Response.json({ error: "Failed to create score" }, { status: 500 });
-  }
-
-  return Response.json(data, { status: 201 });
-}
-
 export async function DELETE(request: Request) {
   const supabase = createClient();
   const session = await auth.api.getSession({
