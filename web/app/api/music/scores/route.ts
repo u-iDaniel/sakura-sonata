@@ -1,7 +1,6 @@
 import { auth } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/bypass-client";
 import { SCORES_TABLE } from "@/lib/supabase/constants";
-import { toMidiBucketPublicUrl } from "@/lib/supabase/utils";
 import { headers } from "next/headers";
 
 export async function GET() {
@@ -16,7 +15,7 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from(SCORES_TABLE)
-    .select("id,title,file_path,created_at,user_id")
+    .select("id,title,created_at,user_id")
     .eq("user_id", session.user.id)
     .order("created_at", { ascending: false });
 
@@ -25,11 +24,5 @@ export async function GET() {
     return Response.json({ error: "Failed to fetch scores" }, { status: 500 });
   }
 
-  // Convert storage paths to public URLs for client
-  const scoresWithUrls = (data ?? []).map((score) => ({
-    ...score,
-    file_path: score.file_path ? toMidiBucketPublicUrl(score.file_path) : null,
-  }));
-
-  return Response.json(scoresWithUrls); // automatically returns 200 status
+  return Response.json(data); // automatically returns 200 status
 }

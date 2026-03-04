@@ -13,6 +13,7 @@ export function toStoragePath(fileUrlOrPath: string) {
  * Converts a storage path to a public URL
  * @param storagePath - The relative path in the storage bucket (e.g., "userId/uploads/hash.mid")
  * @returns The full public URL to access the file
+ * @deprecated No longer used as switched to a private bucket
  */
 export function toMidiBucketPublicUrl(storagePath: string): string {
   const supabase = createClient();

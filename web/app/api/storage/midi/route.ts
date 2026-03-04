@@ -6,6 +6,66 @@ import { headers } from "next/headers";
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 const ALLOWED_EXTENSIONS = [".mid", ".midi"];
 
+export async function GET(request: Request) {
+  const supabase = createClient();
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  });
+
+  if (!session || !session.user || !session.session) {
+    return Response.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const { searchParams } = new URL(request.url);
+  const id = searchParams.get("id");
+
+  if (!id) {
+    return Response.json(
+      { error: "id query parameter is required" },
+      { status: 400 },
+    );
+  }
+
+  // Fetch the score record to verify ownership and get the storage path
+  const { data: score, error: scoreError } = await supabase
+    .from(SCORES_TABLE)
+    .select("id, title, file_path")
+    .eq("id", id)
+    .eq("user_id", session.user.id)
+    .single();
+
+  if (scoreError || !score) {
+    console.error("Error fetching score:", scoreError);
+    return Response.json({ error: "Could not fetch score" }, { status: 500 });
+  }
+
+  if (!score.file_path) {
+    return Response.json(
+      { error: "Score has no associated file" },
+      { status: 404 },
+    );
+  }
+
+  const { data, error } = await supabase.storage
+    .from(MIDI_BUCKET)
+    .download(score.file_path);
+
+  if (error || !data) {
+    console.error("Error downloading MIDI file:", error);
+    return Response.json(
+      { error: "Could not download MIDI file" },
+      { status: 500 },
+    );
+  }
+
+  const blob = new Blob([data], { type: "audio/midi" });
+  return new Response(blob, {
+    headers: {
+      "Content-Type": "audio/midi",
+    },
+  });
+}
+
 export async function POST(request: Request) {
   const supabase = createClient();
   const session = await auth.api.getSession({

@@ -114,9 +114,7 @@ export function useMidiPlayer(
 
         setTitle(data.title ?? "Untitled");
 
-        // TODO: Make backend fetch the MIDI file and return it directly for better security and performance
-        // Response will be the public url thanks to backend processing
-        const res = await fetch(data.file_path);
+        const res = await fetch(`/api/storage/midi?id=${id}`);
         if (!res.ok) {
           setError("Failed to download MIDI file.");
           setLoadState("error");

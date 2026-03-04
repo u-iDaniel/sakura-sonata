@@ -186,11 +186,13 @@ export function FullscreenSettingsMenu({
 export function SettingsRadioItem({
   label,
   description,
+  warning,
   selected,
   onClick,
 }: {
   label: string;
   description?: string;
+  warning?: string;
   selected?: boolean;
   onClick: () => void;
 }) {
@@ -211,6 +213,7 @@ export function SettingsRadioItem({
         {description && (
           <div className="text-xs text-white/40">{description}</div>
         )}
+        {warning && <div className="text-xs text-red-400">{warning}</div>}
       </div>
     </button>
   );

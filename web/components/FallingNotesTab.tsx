@@ -39,6 +39,7 @@ export interface PianoOption {
   value: string;
   label: string;
   description: string;
+  warning?: string;
   factory: PianoPlayerFactory;
 }
 
@@ -364,6 +365,7 @@ export function FallingNotesTab({
                 key={opt.value}
                 label={opt.label}
                 description={opt.description}
+                warning={opt?.warning}
                 selected={pianoKey === opt.value}
                 onClick={() => setPianoKey(opt.value)}
               />

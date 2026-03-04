@@ -51,12 +51,14 @@ const PIANO_OPTIONS: {
   value: string;
   label: string;
   description: string;
+  warning?: string;
   factory: PianoPlayerFactory;
 }[] = [
   {
     value: "splendid",
     label: "Splendid Grand",
     description: "Rich SoundFont piano",
+    warning: "⚠ Uses the most resources",
     factory: splendidPiano,
   },
   {
@@ -217,6 +219,9 @@ function TutorialContent() {
               <div>
                 <div className="font-medium">{opt.label}</div>
                 <div className="text-xs text-slate-400">{opt.description}</div>
+                {opt?.warning && (
+                  <div className="text-xs text-red-500">{opt.warning}</div>
+                )}
               </div>
             </DropdownMenuRadioItem>
           ))}
@@ -302,10 +307,11 @@ function TutorialContent() {
 
   // Piano options without the factory (for the fullscreen settings menu)
   const pianoOptionsForSettings = PIANO_OPTIONS.map(
-    ({ value, label, description }) => ({
+    ({ value, label, description, warning }) => ({
       value,
       label,
       description,
+      warning,
       factory: PIANO_OPTIONS.find((o) => o.value === value)!.factory,
     }),
   );
