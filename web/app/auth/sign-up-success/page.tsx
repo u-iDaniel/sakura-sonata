@@ -21,7 +21,8 @@ export default async function Page() {
                 Thank you for signing up!
               </CardTitle>
               <CardDescription>
-                Check your email {email ? `at ${email}` : ""} to confirm
+                Check your email {email ? `at ${email}` : ""} to finish
+                registering.
               </CardDescription>
             </CardHeader>
             <CardContent>
