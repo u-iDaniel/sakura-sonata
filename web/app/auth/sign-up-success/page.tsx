@@ -5,10 +5,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { notFound } from "next/navigation";
+import { cookies } from "next/headers";
 
-export default function Page() {
-  return notFound();
+export default async function Page() {
+  // Get email from cookie (set in sign-up form on successful sign up) to display in success message
+  const email = (await cookies()).get("email")?.value;
 
   return (
     <div className="flex min-h-svh w-full items-center justify-center p-6 md:p-10">
@@ -16,13 +17,17 @@ export default function Page() {
         <div className="flex flex-col gap-6">
           <Card>
             <CardHeader>
-              <CardTitle className="text-2xl">Thank you for signing up!</CardTitle>
-              <CardDescription>Check your email to confirm</CardDescription>
+              <CardTitle className="text-2xl">
+                Thank you for signing up!
+              </CardTitle>
+              <CardDescription>
+                Check your email {email ? `at ${email}` : ""} to confirm
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground">
-                You&apos;ve successfully signed up. Please check your email to confirm your
-                account before signing in.
+                You&apos;ve successfully signed up. Please check your email to
+                confirm your account before signing in.
               </p>
             </CardContent>
           </Card>

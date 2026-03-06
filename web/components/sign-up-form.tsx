@@ -40,9 +40,12 @@ export function SignUpForm({
         throw new Error("An unknown error occurred during sign up.");
       }
 
-      router.push("/dashboard");
-      // Uncomment below line if we ever add email verification and remove the redirect to /dashboard
-      // router.push("/auth/sign-up-success");
+      // Store email in cookie for 5 minutes to reference in server side page component
+      document.cookie =
+        "email=" +
+        encodeURIComponent(email) +
+        "; max-age=300; path=/auth/sign-up-success";
+      router.push("/auth/sign-up-success");
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred");
     } finally {
