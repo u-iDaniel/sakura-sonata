@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"net/http"
-	"os"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -14,10 +13,7 @@ type getScoreResponse struct {
 }
 
 func (app *App) getScoreHandler(w http.ResponseWriter, r *http.Request) {
-	// Check for secret to make sure people can't get other's data if they happen to know their user id (maybe move this section to middleware later)
-	secret := r.Header.Get("X-Internal-API-Secret")
-
-	if secret != os.Getenv("INTERNAL_API_SECRET") {
+	if !checkInternalAPISecret(r) {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
