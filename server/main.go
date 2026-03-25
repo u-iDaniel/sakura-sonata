@@ -23,6 +23,7 @@ func main() {
 
 	// Declare routes here
 	app.mux.HandleFunc("GET /v1/music/score", app.getScoreHandler)
+	app.mux.HandleFunc("GET /v1/music/scores", app.getScoresHandler)
 
 	http.ListenAndServe(":8080", &app.mux)
 }
