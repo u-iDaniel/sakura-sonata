@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/jackc/pgx/v5"
@@ -18,6 +19,10 @@ func main() {
 		db:  db.New(),
 	}
 
+	defer app.db.Close(context.Background())
+
 	// Declare routes here
 	app.mux.HandleFunc("GET /v1/music/score", app.getScoreHandler)
+
+	http.ListenAndServe(":8080", &app.mux)
 }

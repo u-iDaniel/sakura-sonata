@@ -23,7 +23,5 @@ func New() *pgx.Conn {
 		log.Fatalf("Failed to connect: %v", err)
 	}
 
-	defer conn.Close(context.Background())
-
 	return conn
 }
