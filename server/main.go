@@ -7,6 +7,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/jackc/pgx/v5"
+	_ "github.com/joho/godotenv/autoload"
 	awscfg "github.com/u-iDaniel/sakura-sonata/aws"
 	"github.com/u-iDaniel/sakura-sonata/db"
 )
@@ -39,5 +40,6 @@ func main() {
 	app.mux.HandleFunc("GET /v1/storage/midi", app.getMidiHandler)
 	app.mux.HandleFunc("POST /v1/storage/midi", app.uploadMidiHandler)
 
+	log.Println("Server is running on port 8080")
 	http.ListenAndServe(":8080", &app.mux)
 }
