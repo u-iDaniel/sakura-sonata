@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -195,4 +196,89 @@ func (app *App) getMidiHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
+}
+
+func (app *App) uploadMidiHandler(w http.ResponseWriter, r *http.Request) {
+	if !checkInternalAPISecret(r) {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	userId := r.URL.Query().Get("userId")
+	if userId == "" {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	filePath := r.URL.Query().Get("filePath")
+	if filePath == "" {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	// Grab MIDI file from request
+	const MAX_FILE_SIZE = 10 << 20                              // 10 MB
+	if err := r.ParseMultipartForm(MAX_FILE_SIZE); err != nil { // max file size stored in memory
+		http.Error(w, "Failed to parse form", http.StatusBadRequest)
+		return
+	}
+
+	file, fileHeader, err := r.FormFile("file")
+	if err != nil {
+		http.Error(w, "Missing file", http.StatusBadRequest)
+		return
+	}
+	if fileHeader.Size > MAX_FILE_SIZE {
+		http.Error(w, fmt.Sprintf("File is too large (max size is %v)", uint(MAX_FILE_SIZE)>>20), http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	// Check if object already exists in s3 bucket (by seeing if the key exists since we hash the contents of the file so the same file will have the same name)
+	_, err = app.s3.HeadObject(r.Context(), &s3.HeadObjectInput{
+		Bucket: &app.midiBucket,
+		Key:    &filePath,
+	})
+	if err == nil {
+		// No error means that the object did exist before
+		http.Error(w, "File already exists", http.StatusConflict)
+		return
+	} else if _, ok := errors.AsType[*types.NotFound](err); !ok {
+		// If the error isn't a Not Found error then it's an actual error
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Upload to s3 bucket
+	params := &s3.PutObjectInput{
+		Bucket: &app.midiBucket,
+		Key:    &filePath,
+		Body:   file,
+		// might have to specify content type?
+	}
+	_, err = app.s3.PutObject(r.Context(), params)
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	// Insert a row in the scores table now
+	query := `
+		INSERT INTO scores (user_id, title, file_path)
+		VALUES ($1, $2, $3)
+	`
+	_, err = app.db.Exec(r.Context(), query, userId, fileHeader.Filename, filePath)
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	w.Write([]byte(`{"success": true}`))
 }

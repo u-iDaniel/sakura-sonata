@@ -37,6 +37,7 @@ func main() {
 	app.mux.HandleFunc("GET /v1/music/score", app.getScoreHandler)
 	app.mux.HandleFunc("GET /v1/music/scores", app.getScoresHandler)
 	app.mux.HandleFunc("GET /v1/storage/midi", app.getMidiHandler)
+	app.mux.HandleFunc("POST /v1/storage/midi", app.uploadMidiHandler)
 
 	http.ListenAndServe(":8080", &app.mux)
 }
