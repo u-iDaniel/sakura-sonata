@@ -40,16 +40,22 @@ func (app *App) getScoreHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userId := r.URL.Query().Get("userId")
+	if userId == "" {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
 	var title string
 
 	// Get result from DB
 	query := `
 		SELECT title
 		FROM scores
-		WHERE id = $1;
+		WHERE id = $1 AND user_id = $2;
 	`
 
-	err := app.db.QueryRow(r.Context(), query, id).Scan(&title)
+	err := app.db.QueryRow(r.Context(), query, id, userId).Scan(&title)
 	if err != nil {
 		switch err {
 		case pgx.ErrNoRows:
@@ -201,12 +207,6 @@ func (app *App) getMidiHandler(w http.ResponseWriter, r *http.Request) {
 func (app *App) uploadMidiHandler(w http.ResponseWriter, r *http.Request) {
 	if !checkInternalAPISecret(r) {
 		http.Error(w, "Forbidden", http.StatusForbidden)
-		return
-	}
-
-	id := r.URL.Query().Get("id")
-	if id == "" {
-		http.Error(w, "Bad request", http.StatusBadRequest)
 		return
 	}
 
