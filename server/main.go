@@ -20,6 +20,7 @@ type App struct {
 	db         *pgx.Conn
 	s3         *s3.Client
 	midiBucket string
+	logger     *log.Logger
 }
 
 func main() {
@@ -33,6 +34,7 @@ func main() {
 		db:         db.New(),
 		s3:         s3Client,
 		midiBucket: awscfg.MidiBucketName(),
+		logger:     log.Default(),
 	}
 
 	defer app.db.Close(context.Background())
@@ -49,13 +51,17 @@ func main() {
 	app.mux.HandleFunc("GET /v1/storage/midi", app.getMidiHandler)
 	app.mux.HandleFunc("POST /v1/storage/midi", app.uploadMidiHandler)
 
+	handler := app.loggingMiddleware(&app.mux)
+
 	if os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != "" {
 		// Running within AWS Lambda
 		log.Println("Server is running within AWS Lambda")
-		lambda.Start(httpadapter.NewV2(&app.mux).ProxyWithContext) // NewV2 is for lambda function urls or api gateway HTTP APIs
+		lambda.Start(httpadapter.NewV2(handler).ProxyWithContext) // NewV2 is for lambda function urls or api gateway HTTP APIs
 		return
 	}
 
 	log.Println("Server is running on port 8080")
-	http.ListenAndServe(":8080", &app.mux)
+	if err := http.ListenAndServe(":8080", handler); err != nil {
+		log.Fatalf("server failed: %v", err)
+	}
 }

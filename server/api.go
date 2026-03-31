@@ -28,21 +28,20 @@ type getScoresResponse struct {
 
 func (app *App) getScoreHandler(w http.ResponseWriter, r *http.Request) {
 	if !checkInternalAPISecret(r) {
-		http.Error(w, "Forbidden", http.StatusForbidden)
+		app.writeError(w, r, http.StatusForbidden, "Forbidden", "missing or invalid internal API secret", nil)
 		return
 	}
 
 	id := r.URL.Query().Get("id")
 
 	if id == "" {
-		// Return some 400 error here
-		http.Error(w, "Bad request", http.StatusBadRequest)
+		app.writeError(w, r, http.StatusBadRequest, "Bad request", "missing id query parameter", nil)
 		return
 	}
 
 	userId := r.URL.Query().Get("userId")
 	if userId == "" {
-		http.Error(w, "Bad request", http.StatusBadRequest)
+		app.writeError(w, r, http.StatusBadRequest, "Bad request", "missing userId query parameter", nil)
 		return
 	}
 
@@ -59,9 +58,9 @@ func (app *App) getScoreHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch err {
 		case pgx.ErrNoRows:
-			http.Error(w, "Not found", http.StatusNotFound)
+			app.writeError(w, r, http.StatusNotFound, "Not found", "score not found for id/user", err)
 		default:
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			app.writeError(w, r, http.StatusInternalServerError, "Internal server error", "database query for score failed", err)
 		}
 		return
 	}
@@ -74,26 +73,26 @@ func (app *App) getScoreHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	if err := json.NewEncoder(w).Encode(data); err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		app.writeError(w, r, http.StatusInternalServerError, "Internal server error", "failed to encode getScore response", err)
 		return
 	}
 }
 
 func (app *App) deleteScoreHandler(w http.ResponseWriter, r *http.Request) {
 	if !checkInternalAPISecret(r) {
-		http.Error(w, "Forbidden", http.StatusForbidden)
+		app.writeError(w, r, http.StatusForbidden, "Forbidden", "missing or invalid internal API secret", nil)
 		return
 	}
 
 	id := r.URL.Query().Get("id")
 	if id == "" {
-		http.Error(w, "Bad request", http.StatusBadRequest)
+		app.writeError(w, r, http.StatusBadRequest, "Bad request", "missing id query parameter", nil)
 		return
 	}
 
 	userId := r.URL.Query().Get("userId")
 	if userId == "" {
-		http.Error(w, "Bad request", http.StatusBadRequest)
+		app.writeError(w, r, http.StatusBadRequest, "Bad request", "missing userId query parameter", nil)
 		return
 	}
 
@@ -109,9 +108,9 @@ func (app *App) deleteScoreHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch err {
 		case pgx.ErrNoRows:
-			http.Error(w, "Not found", http.StatusNotFound)
+			app.writeError(w, r, http.StatusNotFound, "Not found", "score not found while resolving file path", err)
 		default:
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			app.writeError(w, r, http.StatusInternalServerError, "Internal server error", "database query for score file path failed", err)
 		}
 		return
 	}
@@ -124,7 +123,7 @@ func (app *App) deleteScoreHandler(w http.ResponseWriter, r *http.Request) {
 		})
 
 		if _, ok := errors.AsType[*types.NoSuchKey](err); err != nil && !ok {
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			app.writeError(w, r, http.StatusInternalServerError, "Internal server error", "failed deleting MIDI from S3", err)
 			return
 		}
 	}
@@ -136,7 +135,7 @@ func (app *App) deleteScoreHandler(w http.ResponseWriter, r *http.Request) {
 
 	_, err = app.db.Exec(r.Context(), deleteQuery, id, userId)
 	if err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		app.writeError(w, r, http.StatusInternalServerError, "Internal server error", "failed deleting score row", err)
 		return
 	}
 
@@ -145,13 +144,13 @@ func (app *App) deleteScoreHandler(w http.ResponseWriter, r *http.Request) {
 
 func (app *App) getScoresHandler(w http.ResponseWriter, r *http.Request) {
 	if !checkInternalAPISecret(r) {
-		http.Error(w, "Forbidden", http.StatusForbidden)
+		app.writeError(w, r, http.StatusForbidden, "Forbidden", "missing or invalid internal API secret", nil)
 		return
 	}
 
 	userId := r.URL.Query().Get("userId")
 	if userId == "" {
-		http.Error(w, "Bad request", http.StatusBadRequest)
+		app.writeError(w, r, http.StatusBadRequest, "Bad request", "missing userId query parameter", nil)
 		return
 	}
 
@@ -164,7 +163,7 @@ func (app *App) getScoresHandler(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := app.db.Query(r.Context(), query, userId)
 	if err != nil {
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		app.writeError(w, r, http.StatusInternalServerError, "Internal Server Error", "database query for scores failed", err)
 		return
 	}
 
@@ -175,7 +174,7 @@ func (app *App) getScoresHandler(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var s getScoresResponse
 		if err := rows.Scan(&s.Id, &s.Title, &s.CreatedAt, &s.UserId); err != nil {
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			app.writeError(w, r, http.StatusInternalServerError, "Internal Server Error", "failed to scan score row", err)
 			return
 		}
 
@@ -185,32 +184,32 @@ func (app *App) getScoresHandler(w http.ResponseWriter, r *http.Request) {
 	rows.Close()
 
 	if err := rows.Err(); err != nil {
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		app.writeError(w, r, http.StatusInternalServerError, "Internal Server Error", "rows iteration failed", err)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(scores); err != nil {
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		app.writeError(w, r, http.StatusInternalServerError, "Internal Server Error", "failed to encode getScores response", err)
 		return
 	}
 }
 
 func (app *App) getMidiHandler(w http.ResponseWriter, r *http.Request) {
 	if !checkInternalAPISecret(r) {
-		http.Error(w, "Forbidden", http.StatusForbidden)
+		app.writeError(w, r, http.StatusForbidden, "Forbidden", "missing or invalid internal API secret", nil)
 		return
 	}
 
 	id := r.URL.Query().Get("id")
 	if id == "" {
-		http.Error(w, "Bad request", http.StatusBadRequest)
+		app.writeError(w, r, http.StatusBadRequest, "Bad request", "missing id query parameter", nil)
 		return
 	}
 
 	userId := r.URL.Query().Get("userId")
 	if userId == "" {
-		http.Error(w, "Bad request", http.StatusBadRequest)
+		app.writeError(w, r, http.StatusBadRequest, "Bad request", "missing userId query parameter", nil)
 		return
 	}
 
@@ -227,15 +226,15 @@ func (app *App) getMidiHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch err {
 		case pgx.ErrNoRows:
-			http.Error(w, "Resource not found", http.StatusNotFound)
+			app.writeError(w, r, http.StatusNotFound, "Resource not found", "score not found while resolving MIDI path", err)
 		default:
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			app.writeError(w, r, http.StatusInternalServerError, "Internal server error", "database query for MIDI path failed", err)
 		}
 		return
 	}
 
 	if filePath == "" {
-		http.Error(w, "Score has no associated MIDI file", http.StatusNotFound)
+		app.writeError(w, r, http.StatusNotFound, "Score has no associated MIDI file", "score has empty MIDI file path", nil)
 		return
 	}
 
@@ -248,9 +247,9 @@ func (app *App) getMidiHandler(w http.ResponseWriter, r *http.Request) {
 	data, err := app.s3.GetObject(r.Context(), params)
 	if err != nil {
 		if _, ok := errors.AsType[*types.NoSuchKey](err); ok {
-			http.Error(w, "MIDI file not found", http.StatusNotFound)
+			app.writeError(w, r, http.StatusNotFound, "MIDI file not found", "MIDI key not found in S3", err)
 		} else {
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			app.writeError(w, r, http.StatusInternalServerError, "Internal server error", "failed to fetch MIDI from S3", err)
 		}
 		return
 	}
@@ -263,43 +262,43 @@ func (app *App) getMidiHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Streams the file data into the http response writer
 	if _, err := io.Copy(w, data.Body); err != nil {
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		app.writeError(w, r, http.StatusInternalServerError, "Internal Server Error", "failed streaming MIDI response body", err)
 		return
 	}
 }
 
 func (app *App) uploadMidiHandler(w http.ResponseWriter, r *http.Request) {
 	if !checkInternalAPISecret(r) {
-		http.Error(w, "Forbidden", http.StatusForbidden)
+		app.writeError(w, r, http.StatusForbidden, "Forbidden", "missing or invalid internal API secret", nil)
 		return
 	}
 
 	userId := r.URL.Query().Get("userId")
 	if userId == "" {
-		http.Error(w, "Bad request", http.StatusBadRequest)
+		app.writeError(w, r, http.StatusBadRequest, "Bad request", "missing userId query parameter", nil)
 		return
 	}
 
 	filePath := r.URL.Query().Get("filePath")
 	if filePath == "" {
-		http.Error(w, "Bad request", http.StatusBadRequest)
+		app.writeError(w, r, http.StatusBadRequest, "Bad request", "missing filePath query parameter", nil)
 		return
 	}
 
 	// Grab MIDI file from request
 	const MAX_FILE_SIZE = 10 << 20                              // 10 MB
 	if err := r.ParseMultipartForm(MAX_FILE_SIZE); err != nil { // max file size stored in memory
-		http.Error(w, "Failed to parse form", http.StatusBadRequest)
+		app.writeError(w, r, http.StatusBadRequest, "Failed to parse form", "failed to parse multipart form", err)
 		return
 	}
 
 	file, fileHeader, err := r.FormFile("file")
 	if err != nil {
-		http.Error(w, "Missing file", http.StatusBadRequest)
+		app.writeError(w, r, http.StatusBadRequest, "Missing file", "multipart file field missing", err)
 		return
 	}
 	if fileHeader.Size > MAX_FILE_SIZE {
-		http.Error(w, fmt.Sprintf("File is too large (max size is %v)", uint(MAX_FILE_SIZE)>>20), http.StatusBadRequest)
+		app.writeError(w, r, http.StatusBadRequest, fmt.Sprintf("File is too large (max size is %v)", uint(MAX_FILE_SIZE)>>20), "uploaded file exceeds max size", nil)
 		return
 	}
 	defer file.Close()
@@ -311,11 +310,11 @@ func (app *App) uploadMidiHandler(w http.ResponseWriter, r *http.Request) {
 	})
 	if err == nil {
 		// No error means that the object did exist before
-		http.Error(w, "File already exists", http.StatusConflict)
+		app.writeError(w, r, http.StatusConflict, "File already exists", "MIDI object already exists in S3", nil)
 		return
 	} else if _, ok := errors.AsType[*types.NotFound](err); !ok {
 		// If the error isn't a Not Found error then it's an actual error
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		app.writeError(w, r, http.StatusInternalServerError, "Internal server error", "failed checking existing MIDI object in S3", err)
 		return
 	}
 
@@ -328,7 +327,7 @@ func (app *App) uploadMidiHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err = app.s3.PutObject(r.Context(), params)
 	if err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		app.writeError(w, r, http.StatusInternalServerError, "Internal server error", "failed uploading MIDI to S3", err)
 		return
 	}
 
@@ -339,7 +338,7 @@ func (app *App) uploadMidiHandler(w http.ResponseWriter, r *http.Request) {
 	`
 	_, err = app.db.Exec(r.Context(), query, userId, fileHeader.Filename, filePath)
 	if err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		app.writeError(w, r, http.StatusInternalServerError, "Internal server error", "failed inserting score row", err)
 		return
 	}
 
