@@ -4,8 +4,11 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"os"
 
+	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/awslabs/aws-lambda-go-api-proxy/httpadapter"
 	"github.com/jackc/pgx/v5"
 	_ "github.com/joho/godotenv/autoload"
 	awscfg "github.com/u-iDaniel/sakura-sonata/aws"
@@ -35,11 +38,23 @@ func main() {
 	defer app.db.Close(context.Background())
 
 	// Declare routes here
+	app.mux.HandleFunc("GET /v1/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("OK"))
+	})
+
 	app.mux.HandleFunc("GET /v1/music/score", app.getScoreHandler)
 	app.mux.HandleFunc("DELETE /v1/music/score", app.deleteScoreHandler)
 	app.mux.HandleFunc("GET /v1/music/scores", app.getScoresHandler)
 	app.mux.HandleFunc("GET /v1/storage/midi", app.getMidiHandler)
 	app.mux.HandleFunc("POST /v1/storage/midi", app.uploadMidiHandler)
+
+	if os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != "" {
+		// Running within AWS Lambda
+		log.Println("Server is running within AWS Lambda")
+		lambda.Start(httpadapter.NewV2(&app.mux).ProxyWithContext) // NewV2 is for lambda function urls or api gateway HTTP APIs
+		return
+	}
 
 	log.Println("Server is running on port 8080")
 	http.ListenAndServe(":8080", &app.mux)
