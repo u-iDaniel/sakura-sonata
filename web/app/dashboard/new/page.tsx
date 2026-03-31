@@ -61,8 +61,16 @@ export default function NewCompositionPage() {
         return;
       }
 
+      const scoreId = body?.scoreId ?? body?.score_id;
+
+      if (!scoreId) {
+        setStatus("");
+        setErrorText("Upload succeeded, but no score id was returned.");
+        return;
+      }
+
       setStatus("");
-      router.push(`/tutorial/${body.scoreId}`);
+      router.push(`/tutorial/${scoreId}`);
     } catch (e: any) {
       setStatus("");
       setErrorText(`Upload error: ${e?.message ?? "Unknown error"}`);

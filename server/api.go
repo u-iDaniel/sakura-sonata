@@ -26,6 +26,10 @@ type getScoresResponse struct {
 	UserId    string    `json:"user_id"`
 }
 
+type uploadMidiResponse struct {
+	ScoreId string `json:"score_id"`
+}
+
 func (app *App) getScoreHandler(w http.ResponseWriter, r *http.Request) {
 	if !checkInternalAPISecret(r) {
 		app.writeError(w, r, http.StatusForbidden, "Forbidden", "missing or invalid internal API secret", nil)
@@ -332,16 +336,27 @@ func (app *App) uploadMidiHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Insert a row in the scores table now
+	var scoreId string
+
 	query := `
 		INSERT INTO scores (user_id, title, file_path)
 		VALUES ($1, $2, $3)
+		RETURNING id;
 	`
-	_, err = app.db.Exec(r.Context(), query, userId, fileHeader.Filename, filePath)
+
+	err = app.db.QueryRow(r.Context(), query, userId, fileHeader.Filename, filePath).Scan(&scoreId)
 	if err != nil {
 		app.writeError(w, r, http.StatusInternalServerError, "Internal server error", "failed inserting score row", err)
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	w.Write([]byte(`{"success": true}`))
+	data := uploadMidiResponse{
+		ScoreId: scoreId,
+	}
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		app.writeError(w, r, http.StatusInternalServerError, "Internal Server Error", "failed to encode uploadMidi response", err)
+		return
+	}
 }

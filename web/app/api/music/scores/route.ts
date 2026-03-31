@@ -1,10 +1,8 @@
 import { auth } from "@/lib/auth";
-import { createClient } from "@/lib/supabase/bypass-client";
-import { SCORES_TABLE } from "@/lib/supabase/constants";
+import { fetchInternalApi } from "@/lib/internal-api";
 import { headers } from "next/headers";
 
 export async function GET() {
-  const supabase = createClient();
   const session = await auth.api.getSession({
     headers: await headers(),
   });
@@ -13,16 +11,24 @@ export async function GET() {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { data, error } = await supabase
-    .from(SCORES_TABLE)
-    .select("id,title,created_at,user_id")
-    .eq("user_id", session.user.id)
-    .order("created_at", { ascending: false });
+  const query = new URLSearchParams({ userId: session.user.id });
 
-  if (error) {
-    console.error("Error fetching scores:", error);
-    return Response.json({ error: "Failed to fetch scores" }, { status: 500 });
+  try {
+    const backendResponse = await fetchInternalApi(
+      "/v1/music/scores",
+      { method: "GET" },
+      query,
+    );
+
+    return new Response(backendResponse.body, {
+      status: backendResponse.status,
+      headers: backendResponse.headers,
+    });
+  } catch (error) {
+    console.error("Error fetching scores from backend:", error);
+    return Response.json(
+      { error: "Failed to call internal backend" },
+      { status: 500 },
+    );
   }
-
-  return Response.json(data); // automatically returns 200 status
 }

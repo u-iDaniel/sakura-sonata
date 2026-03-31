@@ -1,13 +1,11 @@
 import { auth } from "@/lib/auth";
-import { createClient } from "@/lib/supabase/bypass-client";
-import { MIDI_BUCKET, SCORES_TABLE } from "@/lib/supabase/constants";
+import { fetchInternalApi } from "@/lib/internal-api";
 import { headers } from "next/headers";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 const ALLOWED_EXTENSIONS = [".mid", ".midi"];
 
 export async function GET(request: Request) {
-  const supabase = createClient();
   const session = await auth.api.getSession({
     headers: await headers(),
   });
@@ -26,48 +24,32 @@ export async function GET(request: Request) {
     );
   }
 
-  // Fetch the score record to verify ownership and get the storage path
-  const { data: score, error: scoreError } = await supabase
-    .from(SCORES_TABLE)
-    .select("id, title, file_path")
-    .eq("id", id)
-    .eq("user_id", session.user.id)
-    .single();
+  const query = new URLSearchParams({
+    id,
+    userId: session.user.id,
+  });
 
-  if (scoreError || !score) {
-    console.error("Error fetching score:", scoreError);
-    return Response.json({ error: "Could not fetch score" }, { status: 500 });
-  }
-
-  if (!score.file_path) {
-    return Response.json(
-      { error: "Score has no associated file" },
-      { status: 404 },
+  try {
+    const backendResponse = await fetchInternalApi(
+      "/v1/storage/midi",
+      { method: "GET" },
+      query,
     );
-  }
 
-  const { data, error } = await supabase.storage
-    .from(MIDI_BUCKET)
-    .download(score.file_path);
-
-  if (error || !data) {
-    console.error("Error downloading MIDI file:", error);
+    return new Response(backendResponse.body, {
+      status: backendResponse.status,
+      headers: backendResponse.headers,
+    });
+  } catch (error) {
+    console.error("Error downloading MIDI from backend:", error);
     return Response.json(
-      { error: "Could not download MIDI file" },
+      { error: "Failed to call internal backend" },
       { status: 500 },
     );
   }
-
-  const blob = new Blob([data], { type: "audio/midi" });
-  return new Response(blob, {
-    headers: {
-      "Content-Type": "audio/midi",
-    },
-  });
 }
 
 export async function POST(request: Request) {
-  const supabase = createClient();
   const session = await auth.api.getSession({
     headers: await headers(),
   });
@@ -119,40 +101,33 @@ export async function POST(request: Request) {
   const ext = file.name.toLowerCase().endsWith(".midi") ? ".midi" : ".mid";
   const storagePath = `${userId}/uploads/${hashHex}${ext}`;
 
-  // Upload to Supabase Storage (upsert: false will error if the file already exists)
-  const { data: uploadData, error: uploadError } = await supabase.storage
-    .from(MIDI_BUCKET)
-    .upload(storagePath, new Blob([fileBuffer], { type: "audio/midi" }), {
-      contentType: "audio/midi",
-      upsert: false,
-      cacheControl: "3153600000", // 1 year in seconds since this file is immutable (hash-based name)
-    });
-
-  if (uploadError) {
-    console.error("Storage upload error:", uploadError);
-    return Response.json(
-      { error: `Upload failed: ${uploadError.message}` },
-      { status: uploadError.statusCode ? +uploadError.statusCode : 500 },
-    );
-  }
-
-  // Insert a row in the scores table with just the storage path
-  const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-  const scoreId = crypto.randomUUID();
-  const { error: scoreError } = await supabase.from(SCORES_TABLE).insert({
-    id: scoreId,
-    user_id: userId,
-    title: safeName,
-    file_path: uploadData.path,
+  const query = new URLSearchParams({
+    userId,
+    filePath: storagePath,
   });
 
-  if (scoreError) {
-    console.error("Score insert error:", scoreError);
+  const passThroughFormData = new FormData();
+  passThroughFormData.append("file", file);
+
+  try {
+    const backendResponse = await fetchInternalApi(
+      "/v1/storage/midi",
+      {
+        method: "POST",
+        body: passThroughFormData,
+      },
+      query,
+    );
+
+    return new Response(backendResponse.body, {
+      status: backendResponse.status,
+      headers: backendResponse.headers,
+    });
+  } catch (error) {
+    console.error("Error uploading MIDI to backend:", error);
     return Response.json(
-      { error: "Failed to save score record" },
+      { error: "Failed to call internal backend" },
       { status: 500 },
     );
   }
-
-  return Response.json({ scoreId }, { status: 201 });
 }
