@@ -79,6 +79,70 @@ func (app *App) getScoreHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (app *App) deleteScoreHandler(w http.ResponseWriter, r *http.Request) {
+	if !checkInternalAPISecret(r) {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	userId := r.URL.Query().Get("userId")
+	if userId == "" {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	// Delete the associated MIDI file in the s3 first
+	var filePath string
+	query := `
+		SELECT file_path
+		FROM scores
+		WHERE id = $1 AND user_id = $2;
+	`
+
+	err := app.db.QueryRow(r.Context(), query, id, userId).Scan(&filePath)
+	if err != nil {
+		switch err {
+		case pgx.ErrNoRows:
+			http.Error(w, "Not found", http.StatusNotFound)
+		default:
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	if filePath != "" {
+		// Proceed with deletion of s3 file
+		_, err = app.s3.DeleteObject(r.Context(), &s3.DeleteObjectInput{
+			Bucket: &app.midiBucket,
+			Key:    &filePath,
+		})
+
+		if _, ok := errors.AsType[*types.NoSuchKey](err); err != nil && !ok {
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	deleteQuery := `
+		DELETE FROM scores
+		WHERE id = $1 AND user_id = $2;
+	`
+
+	_, err = app.db.Exec(r.Context(), deleteQuery, id, userId)
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (app *App) getScoresHandler(w http.ResponseWriter, r *http.Request) {
 	if !checkInternalAPISecret(r) {
 		http.Error(w, "Forbidden", http.StatusForbidden)

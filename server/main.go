@@ -36,6 +36,7 @@ func main() {
 
 	// Declare routes here
 	app.mux.HandleFunc("GET /v1/music/score", app.getScoreHandler)
+	app.mux.HandleFunc("DELETE /v1/music/score", app.deleteScoreHandler)
 	app.mux.HandleFunc("GET /v1/music/scores", app.getScoresHandler)
 	app.mux.HandleFunc("GET /v1/storage/midi", app.getMidiHandler)
 	app.mux.HandleFunc("POST /v1/storage/midi", app.uploadMidiHandler)
