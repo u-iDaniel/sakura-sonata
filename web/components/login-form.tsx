@@ -34,7 +34,11 @@ export function LoginForm({
 
     try {
       const { error } = await signInWithPassword(email, password);
-      if (error) throw error;
+      if (error?.message) {
+        throw new Error(error.message);
+      } else if (error) {
+        throw new Error("An unknown error occurred during login.");
+      }
       router.push("/dashboard");
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred");
