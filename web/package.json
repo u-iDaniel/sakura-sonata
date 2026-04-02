@@ -1,6 +1,6 @@
 {
   "name": "sakura-sonata",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -29,6 +29,7 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",
+    "resend": "^6.10.0",
     "smplr": "^0.17.0",
     "soundfont-player": "^0.12.0",
     "tailwind-merge": "^3.3.0",
