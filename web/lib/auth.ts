@@ -1,6 +1,6 @@
 import { betterAuth } from "better-auth";
 import { Pool } from "pg";
-import { sendEmail } from "./aws/mailer";
+import { sendEmail } from "./resend/mailer";
 import { after } from "next/server";
 import { getVerificationEmailHtml } from "./email-templates/verify";
 
@@ -8,6 +8,9 @@ export const auth = betterAuth({
   baseURL: process.env.BETTER_AUTH_URL,
   database: new Pool({
     connectionString: process.env.DATABASE_URL,
+    ssl: {
+      rejectUnauthorized: false,
+    },
   }),
   emailAndPassword: {
     enabled: true,
@@ -22,6 +25,7 @@ export const auth = betterAuth({
           to: user.email,
           subject: "Verify your email for Sakura Sonata",
           html: getVerificationEmailHtml(url),
+          idempotencyKey: `verification-email/${token}`,
         }),
       );
     },
