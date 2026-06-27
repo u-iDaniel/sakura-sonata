@@ -8,6 +8,7 @@ export async function updateSession(request: NextRequest) {
 
   if (
     request.nextUrl.pathname !== "/" &&
+    request.nextUrl.pathname !== "/api/health" &&
     !session?.user &&
     !request.nextUrl.pathname.startsWith("/auth") &&
     !request.nextUrl.pathname.startsWith("/api/auth")
