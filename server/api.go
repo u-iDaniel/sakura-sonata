@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/jackc/pgx/v5"
+	awscfg "github.com/u-iDaniel/sakura-sonata/aws"
 )
 
 type getScoreResponse struct {
@@ -27,6 +28,10 @@ type getScoresResponse struct {
 }
 
 type uploadMidiResponse struct {
+	ScoreId string `json:"score_id"`
+}
+
+type musicXMLConversionMessage struct {
 	ScoreId string `json:"score_id"`
 }
 
@@ -289,6 +294,8 @@ func (app *App) uploadMidiHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	autoGenerateMusicXML := r.URL.Query().Get("isAutoGenerateMusicXML")
+
 	// Grab MIDI file from request
 	const MAX_FILE_SIZE = 10 << 20                              // 10 MB
 	if err := r.ParseMultipartForm(MAX_FILE_SIZE); err != nil { // max file size stored in memory
@@ -348,6 +355,29 @@ func (app *App) uploadMidiHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		app.writeError(w, r, http.StatusInternalServerError, "Internal server error", "failed inserting score row", err)
 		return
+	}
+
+	if autoGenerateMusicXML == "true" {
+		// Send a message to the SQS queue to trigger the midi to musicxml conversion
+		message := musicXMLConversionMessage{
+			ScoreId: scoreId,
+		}
+		app.logger.Printf("Sending SQS message for MusicXML conversion: %+v", message)
+		err = awscfg.SendMessage(r.Context(), app.queue, message)
+		if err != nil {
+			// If the SQS message fails to send, we should log the error but still proceed
+			app.logger.Printf("Failed to send SQS message for MusicXML conversion: %v", err)
+		}
+
+		// Log queue message in DB
+		query := `
+			INSERT INTO conversions (score_id, status, midi_path)
+			VALUES ($1, $2, $3);
+		`
+		_, err = app.db.Exec(r.Context(), query, scoreId, "queued", filePath)
+		if err != nil {
+			app.logger.Printf("Failed to log conversion queue message in DB: %v", err)
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")

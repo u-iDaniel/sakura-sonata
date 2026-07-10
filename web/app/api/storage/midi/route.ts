@@ -59,6 +59,8 @@ export async function POST(request: Request) {
   }
 
   const userId = session.user.id;
+  const { searchParams } = new URL(request.url);
+  const autoGenerateMusicXML = searchParams.get("isAutoGenerateMusicXML");
 
   // Parse multipart form data
   let formData: FormData;
@@ -104,6 +106,7 @@ export async function POST(request: Request) {
   const query = new URLSearchParams({
     userId,
     filePath: storagePath,
+    isAutoGenerateMusicXML: autoGenerateMusicXML === "true" ? "true" : "false",
   });
 
   const passThroughFormData = new FormData();

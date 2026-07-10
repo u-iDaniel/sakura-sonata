@@ -6,6 +6,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
 )
 
 const (
@@ -25,6 +26,20 @@ func NewS3Client(ctx context.Context) (*s3.Client, error) {
 	}
 
 	return s3.NewFromConfig(cfg), nil
+}
+
+func NewSQSClient(ctx context.Context) (*sqs.Client, error) {
+	region := os.Getenv("AWS_REGION")
+	if region == "" {
+		region = defaultRegion
+	}
+
+	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
+	if err != nil {
+		return nil, err
+	}
+
+	return sqs.NewFromConfig(cfg), nil
 }
 
 func MidiBucketName() string {

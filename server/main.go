@@ -8,6 +8,7 @@ import (
 
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/awslabs/aws-lambda-go-api-proxy/httpadapter"
 	"github.com/jackc/pgx/v5"
 	_ "github.com/joho/godotenv/autoload"
@@ -20,6 +21,7 @@ type App struct {
 	db         *pgx.Conn
 	s3         *s3.Client
 	midiBucket string
+	queue      *sqs.Client
 	logger     *log.Logger
 }
 
@@ -29,11 +31,17 @@ func main() {
 		log.Fatalf("failed to initialize AWS S3 client: %v", err)
 	}
 
+	sqsClient, err := awscfg.NewSQSClient(context.Background())
+	if err != nil {
+		log.Fatalf("failed to initialize AWS SQS client: %v", err)
+	}
+
 	app := App{
 		mux:        *http.NewServeMux(),
 		db:         db.New(),
 		s3:         s3Client,
 		midiBucket: awscfg.MidiBucketName(),
+		queue:      sqsClient,
 		logger:     log.Default(),
 	}
 

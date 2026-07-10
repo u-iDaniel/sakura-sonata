@@ -10,6 +10,7 @@ import { authClient } from "@/lib/auth-client";
 
 export default function NewCompositionPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [autoGenerateMusicXml, setAutoGenerateMusicXml] = useState(true);
   const [status, setStatus] = useState<string>("");
   const [errorText, setErrorText] = useState<string>("");
   const router = useRouter();
@@ -48,10 +49,20 @@ export default function NewCompositionPage() {
       const formData = new FormData();
       formData.append("file", file); // key is "file", value is the File object
 
-      const res = await fetch("/api/storage/midi", {
-        method: "POST",
-        body: formData,
-      });
+      const query = new URLSearchParams();
+      if (autoGenerateMusicXml) {
+        query.set("isAutoGenerateMusicXML", "true");
+      }
+
+      const res = await fetch(
+        query.toString()
+          ? `/api/storage/midi?${query.toString()}`
+          : "/api/storage/midi",
+        {
+          method: "POST",
+          body: formData,
+        },
+      );
 
       const body = await res.json();
 
@@ -143,6 +154,16 @@ export default function NewCompositionPage() {
           </p>
           <span className="text-sm text-slate-400">MIDI • Max 10MB</span>
         </div>
+
+        <label className="flex cursor-pointer items-center gap-3 rounded-full border border-pink-100 bg-white/60 px-4 py-3 text-sm text-slate-600 backdrop-blur-sm">
+          <input
+            type="checkbox"
+            checked={autoGenerateMusicXml}
+            onChange={(e) => setAutoGenerateMusicXml(e.target.checked)}
+            className="h-4 w-4 rounded border-pink-200 text-pink-400 focus:ring-pink-200"
+          />
+          Auto-generate MusicXML file (sheet music) after upload
+        </label>
 
         {status && (
           <div className="w-full bg-white/70 border border-pink-100 p-4 rounded-xl">
