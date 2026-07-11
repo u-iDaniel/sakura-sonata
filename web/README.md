@@ -18,6 +18,7 @@ To build Docker image and push to AWS ECR, run the following commands in the
 terminal:
 
 ```bash
+aws ecr get-login-password --region <region> | docker login --username AWS --password-stdin <aws-ecr-uri>
 docker build --secret id=env,src=.env -t <ecr-repo-name> .
 docker tag <ecr-repo-name>:latest <aws-ecr-repo-uri>:latest
 docker push <aws-ecr-repo-uri>:latest

@@ -27,6 +27,7 @@ curl http://localhost:8081/health
 To deploy on AWS ECS Fargate as a service, you first should build the Docker image and push it to AWS ECR by running the following commands in the terminal:
 
 ```bash
+aws ecr get-login-password --region us-west-1 | docker login --username AWS --password-stdin 925149287620.dkr.ecr.us-west-1.amazonaws.com
 docker build -t <ecr-repo-name> .
 docker tag <ecr-repo-name>:latest <aws-ecr-repo-uri>:latest
 docker push <aws-ecr-repo-uri>:latest
