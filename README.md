@@ -1,55 +1,103 @@
 # ✿ Sakura Sonata
-### **Team: Hungry Hippos** | **Event: HackED 2026**
 
-An AI-powered music visualization engine that transforms static MIDI files and live keyboard performances into a blooming, high-fidelity experience.
+Sakura Sonata is a monorepo for a piano tutorial visualization app. The system is split into a Next.js frontend, a Go API service, and a Go worker that converts uploaded MIDI files into MusicXML. The root app handles authentication, dashboard UX, playback, practice mode, and the visualization layer.
 
-<p align="center">
-  <img src="https://github.com/user-attachments/assets/03792325-0545-418b-90d7-b9c269214634" width="100%" alt="Sakura Sonata">
-  <br>
-  <em>The "Sakura Sonata" Visualizer in action — where music meets aesthetic.</em>
-</p>
+## Architecture
 
-## ✦ Inspiration
-Digital music files can feel like invisible data. We wanted to bridge the gap between these static MIDI files and the vibrant, rhythmic energy of a live performance. We took the elegance of Japanese aesthetics and the soul of a piano sonata to create **Sakura Sonata**—a platform where your digital music doesn't just get played, it blooms.
+The repo is organized around three runtime processes:
 
-## ✿ What it does
-* **The Upload & Live Studio:** Users can drop MIDI files into a dreamy, aesthetic beige (#FFF6EB) interface designed for a calm, creative experience, or **connect an actual MIDI keyboard via USB to play live.**
-* **The AI Sensei:** Our backend parses complex musical data to identify pitches, durations, and tempo with high precision, while also providing intelligent AI feedback on your performance and composition. It even automatically extracts deep metadata like key signatures, time signatures, and exact note counts!
-* **The Visualizer & Practice Modes:** Instead of boring bars, the app generates a high-fidelity visualization with labeled falling notes (e.g., C4, G4) so users can easily follow along. Users can seamlessly toggle between "Falling Notes", "Audio Player", and a dedicated "Practice" mode.
-* **Speed Control & Custom Audio:** To make learning easier, users can adjust the playback speed anywhere from 0.1x to 2x without distorting the pitch. They can also change and customize the tone of the piano sounds (like "Splendid Grand") directly within the studio.
+1. The web app in `web/` renders the public site, dashboard, tutorial player, and client-side practice flows. Hosted on AWS ECS Fargate behind an Application Load Balancer (ALB).
+2. The internal API server in `server/` owns score metadata, MIDI file retrieval, uploads, deletes, and S3/SQS-backed orchestration. Hosted on AWS Lambda with a public function URL; secured through a shared internal API secret env variable between the frontend and backend.
+3. The MusicXML worker in `workers/musicxml-converter/` consumes queue messages, downloads source MIDI files from S3, converts them with MuseScore, and uploads the result back to storage. Hosted on AWS ECS Fargate.
 
-## 🛠 How we built it
-We utilized a sophisticated, type-safe stack to ensure every note is captured with precision:
-* **Framework:** Next.js 14 with the App Router for seamless page transitions.
-* **Frontend:** TypeScript for a rock-solid codebase that handles complex musical JSON structures.
-* **Styling:** Tailwind CSS for the "Sakura-Aesthetic"—heavy on #FFF6EB beige backgrounds, soft pinks, and clean dark navy accents.
-* **Backend/Database:** Supabase for lightning-fast Google Authentication, PostgreSQL data persistence, and MIDI file storage.
-* **Motion:** Framer Motion to power the signature falling sakura petals and the "blooming" transitions between the dashboard and the arena.
+The web app does not call the Go service directly from the browser. Instead, route handlers in `web/app/api/` forward authenticated requests to the internal API using `fetchInternalApi`, which attaches the shared internal secret and targets the AWS Lambda endpoint.
 
-## 🌊 Challenges we ran into
-* **The Live Hardware Bridge (USB MIDI):** Connecting a physical keyboard to a web application is rarely plug-and-play. We had to dive deep into the Web MIDI API to parse raw hardware signals into usable data for our visualizer. Ensuring that velocity, "note-on," and "note-off" events from the user's keyboard registered in the browser with zero perceived latency was a massive technical hurdle.
-* **Audio Engine & Custom Tones:** Implementing the ability to change piano tones dynamically required managing multiple audio buffers. We had to optimize the audio engine so that switching from a standard grand piano to a different tone didn't cause audio clipping, memory leaks, or lag—especially when playing fast, complex chords.
-* **Real-Time AI Feedback:** Generating meaningful AI feedback on a user's performance meant we had to analyze rhythm and pitch accuracy on the fly. Balancing this heavy data processing in the background without causing the main visualizer thread to drop frames was a tough lesson in state management and performance optimization.
-* **The Responsive Arena (Minimize/Maximize):** We wanted the UI to be fluid, allowing users to minimize the visualizer to a dashboard view or maximize it for full immersion. Keeping the Framer Motion physics smooth—ensuring hundreds of falling petals didn't break or jump erratically when the browser DOM dynamically resized—required intense mathematical mapping and responsive design logic.
+## Request Flow
 
-## 🌸 Accomplishments that we're proud of
-* **Live Hardware Integration:** Successfully bridging the gap between physical instruments and the web browser. We are incredibly proud of achieving zero-latency USB MIDI connectivity, allowing users to play an actual keyboard and instantly see their notes bloom on screen.
-* **The "AI Sensei" Feedback System:** We didn't just build a visualizer; we built an interactive tutor. We successfully integrated an AI layer that analyzes a user's live performance and composition data to provide meaningful, actionable feedback.
-* **Dynamic Audio Engine:** Engineering a robust custom audio system that lets users seamlessly switch piano tones on the fly. Doing this without breaking the app's performance or causing audio clipping makes the studio feel like a professional tool.
-* **Fluid & Responsive Visualizer:** Designing a complex Framer Motion layout that gracefully handles minimizing to a dashboard view or maximizing to full-screen. The falling petals and visualizer physics adjust dynamically without losing their beautiful, dreamy aesthetic.
-* **Production-Ready Full Stack:** Delivering a complete, polished product in a hackathon timeframe. From secure Google Auth and drag-and-drop file parsing to a dynamic Supabase library that stores user sonatas, the app feels premium from end to end.
+The main flow is:
 
-## 📖 What we learned
-Building Sakura Sonata taught us that AI is most powerful when used to enhance human creativity and emotion. Technically, we learned how to bridge the gap between physical hardware and web applications using the Web MIDI API, and how to manage complex audio buffers for real-time instrument switching. We also learned how to manage real-time data streams—transforming raw MIDI and live keyboard inputs into a fluid visual experience—and how to architect a backend that securely persists a user's musical library. Most importantly, we discovered that the "technical" part of a project (the code) and the "soul" (the aesthetic) must work in perfect harmony.
+1. A user signs in through the Next.js app.
+2. The dashboard requests score lists through `web/app/api/music/scores/route.ts`.
+3. The tutorial page requests a specific score and its MIDI file through `web/app/api/music/score/route.ts` and `web/app/api/storage/midi/route.ts`.
+4. The Go server validates the internal secret, queries Postgres through `pgx`, and streams objects from S3.
+5. Uploads can enqueue conversion work for the MusicXML worker through SQS.
 
-## ✿ What's next for Sakura Sonata
-* **The "AI Sensei" Vision (OMR):** We plan to train a custom Computer Vision model (OMR) to read and transcribe physical sheet music (PDF, PNG). Users will be able to snap a photo of a handwritten score and see it bloom into a digital performance.
-* **Ensemble Mode:** AI transcription and visualization for multi-instrumental sheets like violin and cello duets.
-* **Global Concert Hall:** A gallery where users can share their "Sonata Videos" with the world.
+## Core Frontend Features
 
-## 🏗 Built With
-* Next.js
-* TypeScript
-* Tailwind CSS
-* Supabase
-* Framer Motion
+The primary user-facing features live in `web/app/tutorial/[id]/page.tsx` and the hook layer under `web/lib/hooks/`:
+
+- `useMidiPlayer` loads the score metadata, fetches the MIDI file, parses timing and note data, and schedules playback with Tone.js.
+- `usePracticeMode` builds practice steps from note timing, tracks MIDI input devices, and manages the discrete, continuous, and flowing modes.
+- `useVideoExport` renders the visualizer and audio into a downloadable WebM file.
+- `AudioPlayerTab`, `FallingNotesTab`, and `PracticeTab` split the tutorial UI into the playback, visualization, and training surfaces.
+- `PlaybackSpeedControl` and the piano sound selector let the user change tempo and sampler choice without reloading the page.
+
+The dashboard in `web/app/dashboard/page.tsx` shows the user’s saved scores and routes into the tutorial flow. The landing page in `web/app/page.tsx` is the public entry point.
+
+## Backend Responsibilities
+
+The Go API in `server/` exposes a small internal surface:
+
+- `GET /v1/health` for health checks.
+- `GET /v1/music/score` for a single score record.
+- `DELETE /v1/music/score` for score and file deletion.
+- `GET /v1/music/scores` for the user’s score list.
+- `GET /v1/storage/midi` and `POST /v1/storage/midi` for MIDI download and upload.
+
+`server/api.go` handles the request logic, `server/db/db.go` opens the Postgres connection, and `server/aws/` provides S3 and SQS client setup. The service runs either as a normal HTTP server on port 8080 or as an AWS Lambda handler.
+
+## Worker Responsibilities
+
+The converter worker in `workers/musicxml-converter/` runs as a long-lived process:
+
+- `main.go` starts the queue consumer and a separate health endpoint on port 8081.
+- `queue/` wraps SQS receive and delete operations.
+- `storage/` wraps S3 fetch and upload operations.
+- `converter.go` shells out to MuseScore CLI (`mscore`) to generate MusicXML.
+
+## General Directory Map
+
+```text
+├── server/                         # Go internal API service
+│   ├── main.go                     # HTTP/Lambda entry point
+│   ├── api.go                      # score and MIDI routes
+│   ├── logging.go                  # request logging and error helpers
+│   ├── utils.go                    # internal secret validation
+│   ├── aws/                        # AWS client helpers
+│   ├── db/                         # Postgres connection helper
+│   ├── certs/                      # CA bundle for DB TLS verification
+│   └── build/                      # deployment lambda.zip
+├── web/                            # Next.js frontend
+│   ├── app/                        # App Router pages and route handlers
+│   │   ├── page.tsx                # landing page
+│   │   ├── dashboard/              # score library dashboard
+│   │   ├── tutorial/[id]/          # tutorial and visualizer experience
+│   │   ├── auth/                   # login, signup, callback, recovery
+│   │   └── api/                    # Next.js API routes that proxy to Go
+│   ├── components/                 # UI pieces for playback, auth, and layout
+│   ├── lib/                        # client helpers, hooks, auth, piano engine
+│   ├── proxy.ts                    # middleware/proxy integration
+└── workers/                        # background worker processes
+    ├── musicxml-converter/         # event-driven MIDI to MusicXML converter
+        ├── main.go                 # worker entry point
+        ├── helper.go               # SQS message processing and orchestration
+        ├── converter.go            # MuseScore CLI wrapper
+        ├── queue/                  # SQS interface and implementation
+        ├── storage/                # S3 interface and implementation
+        ├── db/                     # worker database connection helper
+        └── health.go               # health endpoint
+```
+
+## Notable Environment Variables
+
+The code relies on a small set of runtime variables:
+
+- `AWS_REGION` for AWS client configuration.
+- `AWS_LAMBDA_ENDPOINT` and `INTERNAL_API_SECRET` for the Next.js-to-Go proxy layer.
+- `DB_HOST`, `DB_USERNAME`, `DB_PASSWORD`, and `DB_PORT` for Postgres.
+- `SQS_QUEUE_URL`, `S3_MIDI_BUCKET`, and related AWS storage settings for upload and conversion.
+- `NEXT_PUBLIC_IS_AI_FEEDBACK_ENABLED` to enable the AI feedback route in the web app.
+
+## Local Development
+
+The repo contains separate run targets for each service. The frontend scripts are defined in `web/package.json`, and the worker can be started with `go run .` from `workers/musicxml-converter/`. The Go API starts on port 8080 and the worker health endpoint listens on port 8081.
