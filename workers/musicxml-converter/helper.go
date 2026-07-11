@@ -148,7 +148,8 @@ func buildMusicXMLKey(userId, fileHash string) string {
 func updateConversionStatus(ctx context.Context, databaseConn *pgx.Conn, scoreId, status string) error {
 	query := `
 		UPDATE conversions
-		SET status = $2
+		SET status = $2,
+		    updated_at = CURRENT_TIMESTAMP
 		WHERE score_id = $1;
 	`
 
@@ -163,7 +164,9 @@ func updateConversionStatus(ctx context.Context, databaseConn *pgx.Conn, scoreId
 func updateCompletedConversion(ctx context.Context, databaseConn *pgx.Conn, scoreId, sheetPath string) error {
 	query := `
 		UPDATE conversions
-		SET status = $2, sheet_path = $3
+		SET status = $2,
+		    sheet_path = $3,
+		    updated_at = CURRENT_TIMESTAMP
 		WHERE score_id = $1;
 	`
 
