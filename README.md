@@ -12,6 +12,9 @@ The repo is organized around three runtime processes:
 
 The web app does not call the Go service directly from the browser. Instead, route handlers in `web/app/api/` forward authenticated requests to the internal API using `fetchInternalApi`, which attaches the shared internal secret and targets the AWS Lambda endpoint.
 
+### Bare-bones Architectural Diagram
+<img width="878" height="1797" alt="graph (2)" src="https://github.com/user-attachments/assets/2165d843-fa82-4a4a-8867-1af58f3208c6" />
+
 ## Request Flow
 
 The main flow is:
